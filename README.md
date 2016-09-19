@@ -1,6 +1,6 @@
-## hibari-brick-rs
+## hibari-brick-rs [![CircleCI](https://circleci.com/gh/hibari/hibari-brick-rs.svg?style=svg)](https://circleci.com/gh/hibari/hibari-brick-rs)
 
-### A fast, Embedded, Ordered Key-Value Store for Big and Small Values
+### A Fast, Embedded, Ordered Key-Value Store for Big and Small Values
 
 **WARNING:** Work in progress. It will not be useful at all at this
 moment.
@@ -26,29 +26,29 @@ value and getting only a portion (a byte range) of a large value.
 Rust is a modern systems programming language that runs blazingly
 fast, prevents segfaults, and guarantees thread safety.
 
-It does not have significant run-time environment such as garbage
-collector. Instead, it gives us finer control over memory allocations,
-making it ideal to develop high-performance middleware that can run
-with very low memory footprint.
+Rust does not have significant run-time environment such as garbage
+collector. Instead, it gives us fine-grained control over memory
+allocations, making it ideal to develop high-performance middleware
+that can run with very low memory footprint.
 
-Here, you will find brief case studies about Rust in production at Dropbox
-and Mozilla (Firefox):
+Here, you will find brief case studies about Rust in production at
+Dropbox and Mozilla (Firefox):
 
 - https://blog.rust-lang.org/2016/05/16/rust-at-one-year.html#rust-in-production
 
 
 ### Requirements
 
-- Unix-Like Operating System
+- Unix-like operating system
   * Linux
   * FreeBSD
 - Rust tool-chain
-  * Stable release (1.0.9 or newer) is required.
-  * Optionally, a nightly build of Rust to run a code-lint tool called
-    "Clippy"
-  * Use [rustup.rs](https://rustup.rs/) to install the latest *stable*
-    release and *nightly* build of Rust tool-chain.
-  * More info on rustup.rs:
+  * A *stable release* (1.0.9 or newer) is required.
+  * Optionally, a *nightly build* of Rust to run a code-lint tool called
+    "Clippy".
+  * Use [rustup.rs](https://rustup.rs/) to install the latest stable
+    release and a nightly build of Rust tool-chains.
+  * More info about rustup.rs:
     [Taking Rust everywhere with rustup](https://blog.rust-lang.org/2016/05/13/rustup.html)
 - RocksDB library
   * On Linux, **TODO**
@@ -75,7 +75,8 @@ There is no documentation (including rustdoc) at this point as the API
 is changing everyday. Maybe you want to read source code in
 [main.rs](https://github.com/hibari/hibari-brick-rs/blob/master/src/main.rs)
 and
-[lib.rs](https://github.com/hibari/hibari-brick-rs/blob/master/src/lib.rs).
+[lib.rs](https://github.com/hibari/hibari-brick-rs/blob/master/src/lib.rs)
+to get basic idea of the API.
 
 
 ### License

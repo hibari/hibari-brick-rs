@@ -14,25 +14,30 @@ dependencies:
   post:
     - sudo apt-get update
     - sudo apt-get install curl file gcc git make openssh-client
+    - sudo apt-get install libgflags-dev libsnappy-dev
     # Delete .gitconfig to prevent "cargo install" and "cargo build" from
     # failing when pulling the registry info (crates.io-index).
     # See https://github.com/rust-lang-ja/rust-by-example-ja/issues/38#issuecomment-238214915
     # NOTE: Assuming .gitconfig only has a rewrite rule for https://github.com
     - cat $HOME/.gitconfig; rm $HOME/.gitconfig
     # Install Rust
-    - curl https://sh.rustup.rs -sSf | sh -s -- --no-modify-path
+    - curl https://sh.rustup.rs -sSf | sh -s -- -y --no-modify-path
     - rustup self update
     - rustup update stable; rustup install nightly; rustup update nightly
-    - rustup run stable rustc --version --verbose; rustup run stable cargo --version --verbose
-    - rustup run nightly rustc --version --verbose; rustup run nightly cargo --version --verbose
+    - rustup run stable rustc --version --verbose
+    - rustup run stable cargo --version --verbose
+    - rustup run nightly rustc --version --verbose
+    - rustup run nightly cargo --version --verbose
     # Build and install RocksDB
-    - curl -O https://github.com/facebook/rocksdb/archive/v${ROCKSDB_RELEASE}.tar.gz
-    - tar xvf v${ROCKSDB_RELEASE}.tar.gz && cd rocksdb-${ROCKSDB_RELEASE} && make shared_lib && make install
+    - curl -L -O https://github.com/facebook/rocksdb/archive/v${ROCKSDB_RELEASE}.tar.gz
+    - tar xvf v${ROCKSDB_RELEASE}.tar.gz && cd rocksdb-${ROCKSDB_RELEASE} && make shared_lib && sudo make install
   cache_directories:
     - "~/.cargo"
 
 test:
   override:
+    # TODO: FIXME
+    - sudo mkdir -p /home/tatsuya/tmp; sudo chown ubuntu:ubuntu /home/tatsuya/tmp
     - rustup run stable cargo clean
     - rustup run stable cargo test
     - rustup run stable cargo main
