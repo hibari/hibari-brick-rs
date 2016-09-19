@@ -20,7 +20,7 @@ dependencies:
     # NOTE: Assuming .gitconfig only has a rewrite rule for https://github.com
     - cat $HOME/.gitconfig; rm $HOME/.gitconfig
     # Install Rust
-    - curl https://sh.rustup.rs -sSf | sh --no-modify-path
+    - curl https://sh.rustup.rs -sSf | sh -s --no-modify-path
     - rustup self update
     - rustup update stable; rustup install nightly; rustup update nightly
     - rustup run stable rustc --version --verbose; rustup run stable cargo --version --verbose
