@@ -8,12 +8,12 @@ machine:
     Asia/Shanghai
   environment:
     PATH: $PATH:$HOME/.cargo/bin
-    ROCKSDB_RELEASE: 4.9
+    # ROCKSDB_RELEASE: 4.9
 
 dependencies:
   post:
     - sudo apt-get update
-    - sudo apt-get install curl file gcc git make openssh-client
+    - sudo apt-get install curl file gcc git make openssh-client xz-utils
     - sudo apt-get install libgflags-dev libsnappy-dev
     # Delete .gitconfig to prevent "cargo install" and "cargo build" from
     # failing when pulling the registry info (crates.io-index).
@@ -23,22 +23,27 @@ dependencies:
     # Install Rust
     - curl https://sh.rustup.rs -sSf | sh -s -- -y --no-modify-path
     - rustup self update
-    - rustup update stable; rustup install nightly; rustup update nightly
+    - rustup update stable
+    - rustup install nightly; rustup update nightly
     - rustup run stable rustc --version --verbose
     - rustup run stable cargo --version --verbose
     - rustup run nightly rustc --version --verbose
     - rustup run nightly cargo --version --verbose
-    # Build and install RocksDB
-    - curl -L -O https://github.com/facebook/rocksdb/archive/v${ROCKSDB_RELEASE}.tar.gz
-    - tar xvf v${ROCKSDB_RELEASE}.tar.gz && cd rocksdb-${ROCKSDB_RELEASE} && make shared_lib && sudo make install
+    # Build and install RocksDB (DISABLED)
+    - # cd $HOME; curl -L -O https://github.com/facebook/rocksdb/archive/v${ROCKSDB_RELEASE}.tar.gz
+    - # cd $HOME; tar xvf v${ROCKSDB_RELEASE}.tar.gz && cd rocksdb-${ROCKSDB_RELEASE} && make shared_lib && sudo make install
+    # Install a pre-built RocksDB
+    - sudo cp -p ./tools/circleci/files/librocksdb.so.4.9.0.ubuntu-14.04-x86_64.xz /usr/local/lib/librocksdb.so.4.9.0.xz
+    - cd /usr/local/lib && sudo xz -d librocksdb.so.4.9.0.xz && sudo ln -fs librocksdb.so.4.9.0 librocksdb.so.4.9 && sudo ln -fs librocksdb.so.4.9.0 librocksdb.so.4 && sudo ln -fs librocksdb.so.4.9.0 lib/librocksdb.so
+    - ls -l /usr/local/lib/librocksdb*
   cache_directories:
     - "~/.cargo"
 
 test:
   override:
-    # TODO: FIXME
+    # TODO: REMOVEME
     - sudo mkdir -p /home/tatsuya/tmp; sudo chown ubuntu:ubuntu /home/tatsuya/tmp
     - rustup run stable cargo clean
     - rustup run stable cargo test
-    - rustup run stable cargo main
+    - rustup run stable cargo run --release
     - rustup run nightly cargo build --features=clippy
