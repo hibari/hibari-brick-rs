@@ -33,7 +33,7 @@ dependencies:
     # - cd $HOME; tar xvf v${ROCKSDB_RELEASE}.tar.gz && cd rocksdb-${ROCKSDB_RELEASE} && make shared_lib && sudo make install
     # Install a pre-built RocksDB
     - sudo cp -p ./tools/circleci/files/librocksdb.so.4.9.0.ubuntu-14.04-x86_64.xz /usr/local/lib/librocksdb.so.4.9.0.xz
-    - cd /usr/local/lib && sudo xz -d librocksdb.so.4.9.0.xz && sudo ln -fs librocksdb.so.4.9.0 librocksdb.so.4.9 && sudo ln -fs librocksdb.so.4.9.0 librocksdb.so.4 && sudo ln -fs librocksdb.so.4.9.0 lib/librocksdb.so
+    - cd /usr/local/lib && sudo xz -d librocksdb.so.4.9.0.xz && sudo ln -fs librocksdb.so.4.9.0 librocksdb.so.4.9 && sudo ln -fs librocksdb.so.4.9.0 librocksdb.so.4 && sudo ln -fs librocksdb.so.4.9.0 librocksdb.so
     - ls -l /usr/local/lib/librocksdb*
   cache_directories:
     - "~/.cargo"
