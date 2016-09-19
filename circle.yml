@@ -8,7 +8,6 @@ machine:
     Asia/Shanghai
   environment:
     PATH: $PATH:$HOME/.cargo/bin
-    # ROCKSDB_RELEASE: 4.9
 
 dependencies:
   post:
