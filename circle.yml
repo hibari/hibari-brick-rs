@@ -40,8 +40,6 @@ dependencies:
 
 test:
   override:
-    # TODO: REMOVEME
-    - sudo mkdir -p /home/tatsuya/tmp; sudo chown ubuntu:ubuntu /home/tatsuya/tmp
     - rustup run stable cargo clean
     - rustup run stable cargo test
     - rustup run stable cargo run --release

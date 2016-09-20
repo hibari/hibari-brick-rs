@@ -208,10 +208,10 @@ pub struct BlobMultiHunk {
 
 #[derive(Debug)]
 pub struct HunkSize {
-    raw_size: u32,
-    footer_size: u16,
-    padding_size: u8,
-    overhead: u8,
+    pub raw_size: u32,
+    pub footer_size: u16,
+    pub padding_size: u8,
+    pub overhead: u8,
 }
 
 #[derive(Debug)]
@@ -949,7 +949,7 @@ mod tests {
     // use crypto::md5::Md5;
 
     #[test]
-    fn test_endoce_hunk() {
+    fn test_endoce_hunks() {
         let brick_name = "brick1";
         let blob1_src = b"Hello";
         let blob2_src = b", ";

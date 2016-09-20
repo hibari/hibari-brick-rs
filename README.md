@@ -69,6 +69,33 @@ $ rustup run nightly cargo build --features=clippy
 ```
 
 
+### Profiling with Valgrind
+
+Install [Valgrind](http://valgrind.org/)
+
+```
+# Ubuntu
+$ sudo apt-get install valgrind
+
+# FreeBSD
+$ sudo pkg install valgrind
+```
+
+Install cargo-profiler
+
+```
+$ cargo install cargo-profiler
+```
+
+Profiling
+
+```
+$ cargo build --release
+$ cargo profiler callgrind --bin ./target/release/hibari-brick-rs -n 50
+$ cargo profiler cachegrind --bin ./target/release/hibari-brick-rs -n 50
+```
+
+
 ### Documentation
 
 There is no documentation (including rustdoc) at this point as the API

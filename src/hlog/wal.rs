@@ -10,14 +10,17 @@ use std::sync::Mutex;
 use std::sync::mpsc::{channel, Sender, SendError, Receiver};
 use std::thread;
 
+use msgpack::Encoder;
+use rustc_serialize::Encodable;
 use rustc_serialize::hex::ToHex;
 
-use hlog::hunk::{BinaryHunk, Blob, BlobWalHunk, Hunk};
+// use hlog::blob_store;
+use hlog::hunk::{self, BinaryHunk, Blob, BlobWalHunk, Hunk, HunkSize, HunkType};
 
 // Consts / Statics
 
-// TODO: Configurable
-pub const WAL_PATH: &'static str = "/home/tatsuya/tmp/hibari_storage_wal";
+// TODO: Configurable (Also see https://doc.rust-lang.org/nightly/std/env/fn.temp_dir.html )
+pub const WAL_PATH: &'static str = "/tmp/hibari-brick-test-data-wal";
 
 lazy_static! {
     static ref WAL_WRITER: WalWriter = WalWriter::new();
@@ -50,11 +53,11 @@ pub enum Request {
 }
 
 #[derive(Debug)]
-struct BrickInfo {
-    brick_name: String,
-    head_seqnum: SeqNum,
-    head_position: HunkOffset,
-    writeback_seqnum: SeqNum,
+pub struct BrickInfo {
+    pub brick_name: String,
+    pub head_seqnum: SeqNum,
+    pub head_position: HunkOffset,
+    pub writeback_seqnum: SeqNum,
 }
 
 #[derive(PartialEq, Debug)]
@@ -72,6 +75,21 @@ pub struct WalPosition {
     val_offset: ValOffset,
     pub val_len: Len,
     pub md5_string: Option<String>,
+}
+
+#[derive(RustcEncodable, RustcDecodable, PartialEq, Debug)]
+pub struct PrivateHLogPosition {
+    seqnum: SeqNum,
+    hunk_pos: HunkOffset,
+    val_offset: ValOffset,
+    pub val_len: Len,
+    pub md5_string: Option<String>,
+}
+
+#[derive(RustcEncodable, RustcDecodable, PartialEq, Debug)]
+pub struct AllocatedPrivateHLogPosition {
+    seqnum: SeqNum,
+    hunk_pos: HunkOffset,
 }
 
 #[derive(Debug)]
@@ -194,19 +212,22 @@ fn process_requests(rx: Receiver<Request>, mut writer: BufWriter<File>) {
             }
             Request::PutBlob { brick_id, value, promise, .. } => {
                 // TODO: Bound check
-                let brick_info = &brick_info_v[brick_id];
-                let brick_name = &brick_info.brick_name;
+                let mut brick_info = &mut brick_info_v[brick_id];
+                let brick_name = brick_info.brick_name.to_string();
 
-                if let Ok(wal_position) = do_put_blob(&mut writer, &mut pos, brick_info, value) {
+                if let Ok(wal_position) = do_put_blob(&mut writer,
+                                                      &mut pos,
+                                                      &mut brick_info,
+                                                      value) {
                     let result = PutBlobResult {
-                        brick_name: brick_name.to_string(),
+                        brick_name: brick_name,
                         storage_position: wal_position,
                     };
                     promise.set(result);
                 } else {
                     // TODO: Need to return an error. e.g. io::Result<PubBlobResult> ?
                     let result = PutBlobResult {
-                        brick_name: brick_name.to_string(),
+                        brick_name: brick_name,
                         storage_position: WalPosition {
                             wal_seqnum: 0,
                             wal_hunk_pos: 0,
@@ -253,12 +274,24 @@ fn do_add_brick(brick_name: &str,
 
 fn do_put_blob(writer: &mut BufWriter<File>,
                mut pos: &mut HunkOffset,
-               brick_info: &BrickInfo,
+               mut brick_info: &mut BrickInfo,
                value: Vec<u8>)
                -> Result<WalPosition, ()> {
     let hunk_flags = [];
     let val_len = value.len() as Len;
-    let blobs = vec![Blob(value)];
+
+    let private_seqnum = brick_info.head_seqnum;
+    let mut private_hunk_pos = &mut brick_info.head_position;
+    // TODO: Check if we want to increment the seqnum
+
+    let private_hlog_pos = AllocatedPrivateHLogPosition {
+        seqnum: private_seqnum,
+        hunk_pos: *private_hunk_pos,
+    };
+    let mut encoded_pos: Vec<u8> = Vec::new();
+    private_hlog_pos.encode(&mut Encoder::new(&mut encoded_pos)).unwrap();
+
+    let blobs = vec![Blob(value), Blob(encoded_pos)];
 
     let hunk = BlobWalHunk::new(&brick_info.brick_name, blobs, &hunk_flags);
     let maybe_md5_string = hunk.md5.as_ref().map(|digest| digest[..].to_hex());
@@ -269,13 +302,15 @@ fn do_put_blob(writer: &mut BufWriter<File>,
     let wal_position = WalPosition {
         wal_seqnum: 0,
         wal_hunk_pos: *pos,
-        private_seqnum: 0,
-        private_hunk_pos: 0,
+        private_seqnum: private_seqnum,
+        private_hunk_pos: *private_hunk_pos,
         val_offset: blob_index[0],
         val_len: val_len as Len,
         md5_string: maybe_md5_string,
     };
-
+    let HunkSize { raw_size, padding_size, .. } =
+        hunk::calc_hunk_size(&HunkType::BlobSingle, &hunk_flags, 0, 1, val_len);
     *pos += hunk_size as HunkOffset;
+    *private_hunk_pos += raw_size as HunkOffset + padding_size as HunkOffset;
     Ok(wal_position)
 }

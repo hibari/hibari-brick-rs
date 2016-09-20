@@ -11,6 +11,9 @@ extern crate rmp_serialize as msgpack;
 extern crate rocksdb;
 extern crate rustc_serialize;
 
+use crypto::digest::Digest;
+use crypto::md5::Md5;
+
 use msgpack::{Encoder, Decoder};
 use rocksdb::{DB, Options, Writable};
 use rustc_serialize::{Encodable, Decodable};
@@ -34,7 +37,7 @@ pub type Etag = String;
 // Consts / Statics
 
 // TODO: Configurable
-const MAIN_DB_PATH: &'static str = "/home/tatsuya/tmp/hibari_storage_test";
+const MAIN_DB_PATH: &'static str = "/tmp/hibari-brick-test-data-rocksdb";
 
 lazy_static! {
     static ref MAIN_DB: DB = {
@@ -58,19 +61,21 @@ pub fn get_brick_id(brick_name: &str) -> Option<BrickId> {
 }
 
 pub fn put(brick_id: BrickId, key: Vec<u8>, value: Vec<u8>) -> io::Result<Etag> {
-    // clone the key for RocksDB
-    let key2 = &key.to_vec();
+    // calculate md5
+    let mut md5_hasher = Md5::new();
+    md5_hasher.input(&value);
+    let md5_str = md5_hasher.result_str();
 
     // write blob to WAL
-    let future = WalWriter::put_value(brick_id, key, value);
+    let future = WalWriter::put_value(brick_id, key.to_vec(), value);
     let PutBlobResult { storage_position, .. } = future.value().unwrap();
 
     // write metadata to RocksDB
     let mut buf: Vec<u8> = Vec::new();
     storage_position.encode(&mut Encoder::new(&mut buf)).unwrap();
-    MAIN_DB.put(key2, &buf[..]).unwrap();
+    MAIN_DB.put(&key, &buf[..]).unwrap();
 
-    Ok(storage_position.md5_string.unwrap_or("".to_string()))
+    Ok(md5_str)
 }
 
 pub fn get(brick_id: BrickId, key: &[u8]) -> io::Result<Option<Vec<u8>>> {
