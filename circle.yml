@@ -23,9 +23,12 @@ dependencies:
     - curl https://sh.rustup.rs -sSf | sh -s -- -y --no-modify-path
     - rustup self update
     - rustup update stable
+    - rustup install beta; rustup update beta
     - rustup install nightly; rustup update nightly
     - rustup run stable rustc --version --verbose
     - rustup run stable cargo --version --verbose
+    - rustup run beta rustc --version --verbose
+    - rustup run beta cargo --version --verbose
     - rustup run nightly rustc --version --verbose
     - rustup run nightly cargo --version --verbose
     # Build and install RocksDB (DISABLED)
@@ -41,6 +44,10 @@ dependencies:
 test:
   override:
     - rustup run stable cargo clean
+    - rustup run nightly cargo build --features=clippy
     - rustup run stable cargo test
     - rustup run stable cargo run --release
-    - rustup run nightly cargo build --features=clippy
+    - rustup run beta cargo test
+    - rustup run beta cargo run --release
+    - rustup run nightly cargo test
+    - rustup run nightly cargo run --release
