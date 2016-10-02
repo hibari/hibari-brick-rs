@@ -43,11 +43,12 @@ dependencies:
 
 test:
   override:
-    - rustup run stable cargo clean
+    - rustup run nightly cargo clean
     - rustup run nightly cargo build --features=clippy
+    - rustup run stable cargo clean
     - rustup run stable cargo test
     - rustup run stable cargo run --release
+    - rustup run beta cargo clean
     - rustup run beta cargo test
     - rustup run beta cargo run --release
-    - rustup run nightly cargo test
-    - rustup run nightly cargo run --release
+
