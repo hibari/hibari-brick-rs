@@ -144,7 +144,7 @@ const TYPE_BLOB_SINGLE: u8 = b's';
 const TYPE_BLOB_MULTI: u8 = b'p';  // "p" stands for "packed" blobs. ("m" is already taken)
 
 // Flags are stored in 1 byte space, so we can put up to 8 flags.
-const FLAG_NO_MD5: u8 = 0x01u8;
+const FLAG_NO_MD5: u8 = 0b000_0001;
 
 
 #[derive(Debug)]
@@ -467,7 +467,7 @@ fn append_hunk_footer(hunk: &mut Vec<u8>,
     if *hunk_type == HunkType::BlobSingle || *hunk_type == HunkType::BlobMulti {
         if let Some(ref ages) = *blob_ages {
             for age in ages {
-                hunk.write_u8(*age).unwrap();
+                hunk.push(*age);
             }
         } else {
             panic!("no age provided");
@@ -530,7 +530,7 @@ fn append_encoded_flags(hunk: &mut Vec<u8>, flags: &[HunkFlag]) {
             HunkFlag::NoMd5 => encoded_flags |= FLAG_NO_MD5,
         }
     }
-    hunk.write_u8(encoded_flags).unwrap();
+    hunk.push(encoded_flags);
 }
 
 fn encode_brick_name(brick_name: Option<String>) -> (Option<Vec<u8>>, u16) {
