@@ -15,7 +15,7 @@ use crypto::digest::Digest;
 use crypto::md5::Md5;
 
 use msgpack::{Encoder, Decoder};
-use rocksdb::{DB, Options, Writable};
+use rocksdb::{DB, Options};
 use rustc_serialize::{Encodable, Decodable};
 
 use std::io;
@@ -41,7 +41,7 @@ const MAIN_DB_PATH: &'static str = "/tmp/hibari-brick-test-data-rocksdb";
 
 lazy_static! {
     static ref MAIN_DB: DB = {
-        let mut opts = Options::new();
+        let mut opts = Options::default();
         opts.create_if_missing(true);
 
         DB::open(&opts, MAIN_DB_PATH).unwrap()
