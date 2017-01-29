@@ -31,13 +31,6 @@ dependencies:
     - rustup run beta cargo --version --verbose
     - rustup run nightly rustc --version --verbose
     - rustup run nightly cargo --version --verbose
-    # Build and install RocksDB (DISABLED)
-    # - cd $HOME; curl -L -O https://github.com/facebook/rocksdb/archive/v${ROCKSDB_RELEASE}.tar.gz
-    # - cd $HOME; tar xvf v${ROCKSDB_RELEASE}.tar.gz && cd rocksdb-${ROCKSDB_RELEASE} && make shared_lib && sudo make install
-    # Install a pre-built RocksDB (DISABLED)
-    # - sudo cp -p ./tools/circleci/files/librocksdb.so.4.9.0.ubuntu-14.04-x86_64.xz /usr/local/lib/librocksdb.so.4.9.0.xz
-    # - cd /usr/local/lib && sudo xz -d librocksdb.so.4.9.0.xz && sudo ln -fs librocksdb.so.4.9.0 librocksdb.so.4.9 && sudo ln -fs librocksdb.so.4.9.0 librocksdb.so.4 && sudo ln -fs librocksdb.so.4.9.0 librocksdb.so
-    # - ls -l /usr/local/lib/librocksdb*
   cache_directories:
     - "~/.cargo"
 
@@ -45,14 +38,12 @@ test:
   override:
     - rustup run nightly cargo clean
     - rustup run nightly cargo build --features=clippy:
-        timeout: 1200
+        timeout: 900
     - rustup run stable cargo clean
-    - rustup run stable cargo test:
-        timeout: 1200
-    - rustup run stable cargo run --release:
-        timeout: 1200
+    - rustup run stable cargo test --release:
+        timeout: 900
+    - rustup run stable cargo run --release
     - rustup run beta cargo clean
-    - rustup run beta cargo test:
-        timeout: 1200
-    - rustup run beta cargo run --release:
-        timeout: 1200
+    - rustup run beta cargo test --release:
+        timeout: 900
+    - rustup run beta cargo run --release
