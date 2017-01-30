@@ -452,7 +452,7 @@ fn append_hunk_footer(hunk: &mut Vec<u8>,
     hunk.extend_from_slice(HUNK_FOOTER_MAGIC);
 
     if let Some(md5) = md5 {
-        hunk.write(&md5).unwrap();
+        hunk.write_all(&md5).unwrap();
     }
     if *hunk_type == HunkType::Metadata || *hunk_type == HunkType::BlobWal {
         if let Some(mut bn) = encoded_brick_name {
