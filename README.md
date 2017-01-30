@@ -50,9 +50,9 @@ Dropbox and Mozilla (Firefox):
     release and a nightly build of Rust tool-chains.
   * More info about rustup.rs:
     [Taking Rust everywhere with rustup](https://blog.rust-lang.org/2016/05/13/rustup.html)
-- RocksDB library
-  * On Linux, **TODO**
-  * On FreeBSD, `sudo pkg install rocksdb` (Tested with RockDB 4.6.1)
+- Tools and libraries to build RocksDB
+  * On Linux (Ubuntu), `sudo apt install gcc make libgflags-dev`
+  * On FreeBSD, **TODO**
 
 
 ### Building and Running
@@ -75,7 +75,7 @@ Install [Valgrind](http://valgrind.org/)
 
 ```
 # Ubuntu
-$ sudo apt-get install valgrind
+$ sudo apt install valgrind
 
 # FreeBSD
 $ sudo pkg install valgrind
@@ -99,7 +99,7 @@ $ cargo profiler cachegrind --bin ./target/release/hibari-brick-rs -n 50
 ### Documentation
 
 There is no documentation (including rustdoc) at this point as the API
-is changing everyday. Maybe you want to read source code in
+will be changing everyday. Maybe you want to read source code in
 [main.rs](https://github.com/hibari/hibari-brick-rs/blob/master/src/main.rs)
 and
 [lib.rs](https://github.com/hibari/hibari-brick-rs/blob/master/src/lib.rs)
