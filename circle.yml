@@ -10,7 +10,7 @@ machine:
     PATH: $PATH:$HOME/.cargo/bin
     # Parallel gcc jobs for building Snappy and RocksDB.
     # See: https://github.com/hibari/hibari-brick-rs/issues/3
-    NUM_JOBS: 4
+    CI_NUM_JOBS: 4
 
 dependencies:
   post:
@@ -40,13 +40,13 @@ dependencies:
 test:
   override:
     - rustup run nightly cargo clean
-    - rustup run nightly cargo build --features=clippy:
+    - rustup run nightly cargo build --jobs $CI_NUM_JOBS --features=clippy:
         timeout: 900
     - rustup run stable cargo clean
-    - rustup run stable cargo test --release:
+    - rustup run stable cargo test --jobs $CI_NUM_JOBS --release:
         timeout: 900
     - rustup run stable cargo run --release
     - rustup run beta cargo clean
-    - rustup run beta cargo test --release:
+    - rustup run beta cargo test --jobs $CI_NUM_JOBS --release:
         timeout: 900
     - rustup run beta cargo run --release
