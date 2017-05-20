@@ -23,7 +23,7 @@ use std::thread;
 use std::sync::Arc;
 
 const NUM_THREADS: u32 = 50;
-const NUM_KEYS_PER_THREAD: u32 = 10_000;
+const NUM_KEYS_PER_THREAD: u32 = 50_000;
 
 fn main() {
     let brick_name = "brick1";

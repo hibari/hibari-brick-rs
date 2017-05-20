@@ -21,11 +21,14 @@
 extern crate lazy_static;
 
 extern crate byteorder;
+extern crate chrono;
 extern crate crypto;
 extern crate promising_future;
+extern crate rand;
 extern crate rmp_serialize as msgpack;
 extern crate rocksdb;
 extern crate rustc_serialize;
+extern crate timer;
 
 use crypto::digest::Digest;
 use crypto::md5::Md5;
@@ -44,6 +47,7 @@ use std::io;
 pub mod hlog {
     pub mod hunk;
     pub mod wal;
+    pub mod write_back;
 }
 
 pub use hlog::wal::BrickId;
@@ -89,7 +93,7 @@ pub fn put(brick_id: BrickId, key: Vec<u8>, value: Vec<u8>) -> io::Result<Etag> 
 
     // write blob to WAL
     let future = WalWriter::put_value(brick_id, key.to_vec(), value);
-    let PutBlobResult { storage_position, .. } = future.value().unwrap();
+    let PutBlobResult { storage_position, .. } = future.value().unwrap().unwrap();
 
     // write metadata to RocksDB
     let mut buf: Vec<u8> = Vec::new();

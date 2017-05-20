@@ -62,7 +62,7 @@ pub enum Request {
         brick_id: BrickId,
         key: Vec<u8>,
         value: Vec<u8>,
-        promise: Promise<PutBlobResult>,
+        promise: Promise<io::Result<PutBlobResult>>,
     },
     Flush(Promise<FlushPosition>),
     Shutdown(Promise<bool>),
@@ -129,7 +129,7 @@ impl WalWriter {
             //     .open(WAL_PATH).unwrap();
             let f = File::create(WAL_PATH).unwrap();
             let writer = BufWriter::new(f);
-            process_requests(rx, writer);
+            handle_requests(rx, writer);
         });
 
         WalWriter { queue: Mutex::new(tx) }
@@ -148,7 +148,7 @@ impl WalWriter {
     }
 
     // Executed by the WAL thread
-    pub fn put_value(brick_id: BrickId, key: Vec<u8>, value: Vec<u8>) -> Future<PutBlobResult> {
+    pub fn put_value(brick_id: BrickId, key: Vec<u8>, value: Vec<u8>) -> Future<io::Result<PutBlobResult>> {
         let (future, prom) = future_promise();
         let req = Request::PutBlob {
             brick_id: brick_id,
@@ -204,17 +204,27 @@ impl WalWriter {
     }
 }
 
+// Drop will never called because it is the WalWriter is bound to static?
+impl Drop for WalWriter {
+    fn drop(&mut self) {
+        WalWriter::shutdown();
+    }
+}
+
 fn send(req: Request) -> Result<(), SendError<Request>> {
     LOCAL_Q.with(|queue| queue.send(req))
 }
 
-fn process_requests(rx: Receiver<Request>, mut writer: BufWriter<File>) {
+fn handle_requests(rx: Receiver<Request>, mut writer: BufWriter<File>) {
 
     // State
     // let mut seq_num: SeqNum = 0u32;
     let mut pos: HunkOffset = 0u64;
     let mut brick_ids: HashMap<String, BrickId> = HashMap::new();
     let mut brick_info_v: Vec<BrickInfo> = Vec::new();
+
+    // This will effectively start the WriteBack thread;
+    super::write_back::WriteBack::poke();
 
     loop {
         match rx.recv().unwrap() {
@@ -226,36 +236,17 @@ fn process_requests(rx: Receiver<Request>, mut writer: BufWriter<File>) {
                 let maybe_id = brick_ids.get(&brick_name).map(|id| id.to_owned());
                 promise.set(maybe_id);
             }
-            Request::PutBlob { brick_id, value, promise, .. } => {
+            Request::PutBlob { brick_id, key, value, promise } => {
                 // TODO: Bound check
                 let mut brick_info = &mut brick_info_v[brick_id];
                 let brick_name = brick_info.brick_name.to_string();
 
-                if let Ok(wal_position) = do_put_blob(&mut writer,
-                                                      &mut pos,
-                                                      &mut brick_info,
-                                                      value) {
-                    let result = PutBlobResult {
+                let result = do_put_blob(&mut writer, &mut pos, &mut brick_info, key, value)
+                    .map(|wal_position| PutBlobResult {
                         brick_name: brick_name,
                         storage_position: wal_position,
-                    };
-                    promise.set(result);
-                } else {
-                    // TODO: Need to return an error. e.g. io::Result<PubBlobResult> ?
-                    let result = PutBlobResult {
-                        brick_name: brick_name,
-                        storage_position: WalPosition {
-                            wal_seqnum: 0,
-                            wal_hunk_pos: 0,
-                            private_seqnum: 0,
-                            private_hunk_pos: 0,
-                            val_offset: 0,
-                            val_len: 0,
-                            md5_string: None,
-                        },
-                    };
-                    promise.set(result);
-                }
+                    });
+                promise.set(result);
             }
             Request::Flush(promise) => {
                 writer.flush().unwrap();
@@ -263,6 +254,7 @@ fn process_requests(rx: Receiver<Request>, mut writer: BufWriter<File>) {
             }
             Request::Shutdown(promise) => {
                 writer.flush().unwrap();
+                super::write_back::WriteBack::shutdown();
                 promise.set(true);
                 break;  // break from the event loop.
             }
@@ -291,8 +283,9 @@ fn do_add_brick(brick_name: &str,
 fn do_put_blob(writer: &mut BufWriter<File>,
                mut pos: &mut HunkOffset,
                mut brick_info: &mut BrickInfo,
+               key: Vec<u8>,
                value: Vec<u8>)
-               -> Result<WalPosition, ()> {
+               -> io::Result<WalPosition> {
     let hunk_flags = [];
     let val_len = value.len() as Len;
 
@@ -307,7 +300,7 @@ fn do_put_blob(writer: &mut BufWriter<File>,
     let mut encoded_pos: Vec<u8> = Vec::new();
     private_hlog_pos.encode(&mut Encoder::new(&mut encoded_pos)).unwrap();
 
-    let blobs = vec![Blob(value), Blob(encoded_pos)];
+    let blobs = vec![Blob(value), Blob(key), Blob(encoded_pos)];
 
     let hunk = BlobWalHunk::new(&brick_info.brick_name, blobs, &hunk_flags);
     let maybe_md5_string = hunk.md5.as_ref().map(|digest| digest[..].to_hex());
