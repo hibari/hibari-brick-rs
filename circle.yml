@@ -45,8 +45,8 @@ test:
     - rustup run stable cargo clean
     - rustup run stable cargo test --jobs $CI_NUM_JOBS --release:
         timeout: 900
-    - rustup run stable cargo run --release
+    - rustup run stable cargo run --release --example simple
     - rustup run beta cargo clean
     - rustup run beta cargo test --jobs $CI_NUM_JOBS --release:
         timeout: 900
-    - rustup run beta cargo run --release
+    - rustup run beta cargo run --release --example simple

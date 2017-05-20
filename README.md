@@ -62,7 +62,7 @@ Dropbox and Mozilla (Firefox):
 $ cargo test
 
 # run a simple demo program
-$ cargo run --release
+$ cargo run --release --example simple
 
 # code lint
 $ rustup run nightly cargo build --features=clippy
