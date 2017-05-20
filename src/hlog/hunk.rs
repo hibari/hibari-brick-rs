@@ -141,7 +141,7 @@ const TYPE_BLOB_SINGLE: u8 = b's';
 const TYPE_BLOB_MULTI: u8 = b'p';  // "p" stands for "packed" blobs. ("m" is already taken)
 
 // Flags are stored in 1 byte space, so we can put up to 8 flags.
-const FLAG_NO_MD5: u8 = 0b000_0001;
+const FLAG_NO_MD5: u8 = 0b_0000_0001;
 
 
 #[derive(Debug)]
@@ -647,8 +647,8 @@ fn decode_header(header: &[u8]) -> Result<(HunkType, Vec<HunkFlag>, u16, u16, u3
     let number_of_blobs = reader.read_u16::<BigEndian>().unwrap();
     let total_blob_size = reader.read_u32::<BigEndian>().unwrap();
 
-    let decoded_type = try!(decode_type(hunk_type));
-    let decoded_flags = try!(decode_flags(flags));
+    let decoded_type = decode_type(hunk_type)?;
+    let decoded_flags = decode_flags(flags)?;
 
     Ok((decoded_type, decoded_flags, brick_name_size, number_of_blobs, total_blob_size))
 }
