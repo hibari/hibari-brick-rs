@@ -43,7 +43,7 @@ Dropbox and Mozilla (Firefox):
   * Linux
   * FreeBSD
 - Rust tool-chain
-  * A *stable release* (1.0.9 or newer) is required.
+  * A *stable release* (1.13 or newer) is required.
   * Optionally, a *nightly build* of Rust to run a code-lint tool called
     "Clippy".
   * Use [rustup.rs](https://rustup.rs/) to install the latest stable

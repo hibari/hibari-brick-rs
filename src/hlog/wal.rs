@@ -168,21 +168,21 @@ impl WalWriter {
         let position = wal_position.wal_hunk_pos + wal_position.val_offset as u64;
 
         // read blob (from HLog or WAL)
-        let mut f = try!(File::open(WAL_PATH));
-        let mut pos = try!(f.seek(SeekFrom::Start(position)));
+        let mut f = File::open(WAL_PATH)?;
+        let mut pos = f.seek(SeekFrom::Start(position))?;
         if pos < position {
             WalWriter::flush();
-            pos = try!(f.seek(SeekFrom::Start(position)));
+            pos = f.seek(SeekFrom::Start(position))?;
         }
         assert_eq!(pos, position);
 
         let val_len = wal_position.val_len as u64;
         let mut chunk = f.take(val_len);
         let mut buf = Vec::with_capacity(val_len as usize);
-        let mut size = try!(chunk.read_to_end(&mut buf));
+        let mut size = chunk.read_to_end(&mut buf)?;
         if size < val_len as usize {
             WalWriter::flush();
-            size = try!(chunk.read_to_end(&mut buf));
+            size = chunk.read_to_end(&mut buf)?;
         }
         assert_eq!(val_len as usize, size);
 
