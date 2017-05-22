@@ -90,9 +90,9 @@ $ cargo install cargo-profiler
 Profiling
 
 ```
-$ cargo build --release
-$ cargo profiler callgrind --bin ./target/release/hibari-brick-rs -n 50
-$ cargo profiler cachegrind --bin ./target/release/hibari-brick-rs -n 50
+$ cargo build --release --example simple
+$ cargo profiler callgrind --bin ./target/release/examples/simple -n 50
+$ cargo profiler cachegrind --bin ./target/release/examples/simple -n 50
 ```
 
 
@@ -100,9 +100,9 @@ $ cargo profiler cachegrind --bin ./target/release/hibari-brick-rs -n 50
 
 There is no documentation (including rustdoc) at this point as the API
 will be changing everyday. Maybe you want to read source code in
-[main.rs](https://github.com/hibari/hibari-brick-rs/blob/master/src/main.rs)
+[examples/simple.rs](https://github.com/hibari/hibari-brick-rs/blob/master/examples/simple.rs)
 and
-[lib.rs](https://github.com/hibari/hibari-brick-rs/blob/master/src/lib.rs)
+[src/lib.rs](https://github.com/hibari/hibari-brick-rs/blob/master/src/lib.rs)
 to get basic idea of the API.
 
 

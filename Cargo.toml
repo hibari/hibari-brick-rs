@@ -8,11 +8,14 @@ build = "build.rs"
 
 [dependencies]
 byteorder = "1.0.0"
+data-encoding = "2.0.0-rc.1"
+generic-array = "0.7.2"
 lazy_static = "0.2.2"
+md-5 = "0.4.3"
 promising-future = "0.2.4"
-rmp-serialize = "0.8.0"
+rmp-serde = "0.13.1"
 rocksdb = "0.6.0"
-rust-crypto = "0.2.36"
-rustc-serialize = "0.3.22"
+serde = "1.0.7"
+serde_derive = "1.0.7"
 
 clippy = { version = "*", optional = true }
