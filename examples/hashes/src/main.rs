@@ -15,15 +15,18 @@
 // ----------------------------------------------------------------------
 
 extern crate blake2;
-extern crate data_encoding;
-extern crate rand;
+extern crate md_5 as md5;
 extern crate sha2;
 extern crate sha3;
+
+extern crate rand;
+extern crate data_encoding;
 
 use std::time::Instant;
 
 // use digest::Digest;
 use blake2::{Blake2s, Digest};
+use md5::Md5;
 use sha2::Sha256;
 use sha3::Sha3_256;
 
@@ -35,11 +38,13 @@ fn main() {
 
     println!("Input data length: {:.2} GB", input_len as f64 / 1024.0 / 1024.0 / 1024.0);
 
+    let elapse_md5 = hash::<Md5>(input_len, "MD5      ");
     let elapse_sha256 = hash::<Sha256>(input_len, "SHA-256  ");
     let elapse_sha3_256 = hash::<Sha3_256>(input_len, "SHA-3-256");
     let elapse_blake2 = hash::<Blake2s>(input_len, "Blake2s  ");
 
-    println!("SHA-256: 1.00x, SHA-3-256: {:.2}x, Blake2s: {:.2}x",
+    println!("MD5: {:.2}x, SHA-256: 1.00x, SHA-3-256: {:.2}x, Blake2s: {:.2}x",
+             elapse_sha256 / elapse_md5,
              elapse_sha256 / elapse_sha3_256,
              elapse_sha256 / elapse_blake2);
 }
