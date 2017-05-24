@@ -23,10 +23,9 @@ extern crate lazy_static;
 #[macro_use]
 extern crate serde_derive;
 
+extern crate blake2_rfc;
 extern crate byteorder;
 extern crate data_encoding;
-extern crate generic_array;
-extern crate md_5 as md5;
 extern crate promising_future;
 extern crate rmp_serde as rmps;
 extern crate rocksdb;
@@ -38,7 +37,6 @@ use serde::{Deserialize, Serialize};
 
 use std::io;
 
-//
 // cargo rustc --lib -- -Z unstable-options --unpretty=''hir,typed'' (zsh)
 // cargo rustc --lib -- -Z unstable-options --unpretty=hir,typed     (bash)
 // cargo rustc --lib -- -Z unstable-options --unpretty=mir
@@ -51,13 +49,9 @@ pub mod hlog {
 pub use hlog::wal::BrickId;
 use hlog::wal::{PutBlobResult, WalPosition, WalWriter};
 
-// Type Defs
-
 pub type Etag = String;
 // pub type Metadata
 // pub type TTL
-
-// Consts / Statics
 
 // TODO: Configurable
 const MAIN_DB_PATH: &'static str = "/tmp/hibari-brick-test-data-rocksdb";
@@ -70,10 +64,6 @@ lazy_static! {
         DB::open(&opts, MAIN_DB_PATH).unwrap()
     };
 }
-
-// Structs
-
-// Public API
 
 pub fn add_brick(brick_name: &str) -> BrickId {
     WalWriter::add_brick(brick_name)

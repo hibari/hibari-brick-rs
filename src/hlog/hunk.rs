@@ -14,10 +14,8 @@
 //  limitations under the License.
 // ----------------------------------------------------------------------
 
+use blake2_rfc::blake2b::{blake2b, Blake2b};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use generic_array::GenericArray;
-use generic_array::typenum::U16;
-use md5::{Md5, Digest};
 
 // use std::io;
 // use std::io::prelude::*;
@@ -54,7 +52,7 @@ use std::io::{Cursor, Write};
 // - Header (12 bytes, fixed length)
 //   * Header Magic Numbers (2 bytes)                    <<16#90, 16#7F>>  %% no meaning
 //   * Type (1 byte)
-//   * Flags (has_md5, etc.) (1 byte)
+//   * Flags (has_checksum, etc.) (1 byte)
 //   * BrickNameSize (2 bytes, ubint)                    0 for non-WAL hunks
 //   * NumberOfBlobs (2 bytes, ubnit)
 //   * TotalBlobSize (4 bytes, ubnit)                    Max value size is (4 GB - 1 byte)
@@ -70,7 +68,7 @@ use std::io::{Cursor, Write};
 //   * BlobN (binary)
 // - Footer (variable length)
 //   * Footer Magic Number (2 bytes)                    <<16#07, 16#E3>>  %% no meaning
-//   * Blob Checksum (md5) (16 bytes) (optional)
+//   * Blob Checksum (32 bytes) (optional)
 //   * BrickName (binary)
 //   * Blob Index (4 bytes * NumberOfBlobs, ubint)
 //   * Padding                                          Total hunk size is aligned to 8 byte boundary
@@ -85,7 +83,7 @@ use std::io::{Cursor, Write};
 //   * BlobN (binary)
 // - Footer (variable length)
 //   * Footer Magic Number (2 bytes)                    <<16#07, 16#E3>>  %% no meaning
-//   * Blob Checksum (md5) (16 bytes) (optional)
+//   * Blob Checksum (32 bytes) (optional)
 //   * BrickName (binary)
 //   * Blob Index (4 bytes * NumberOfBlobs, ubint)
 //   * Padding                                          Total hunk size is aligned to 8 byte boundary
@@ -97,7 +95,7 @@ use std::io::{Cursor, Write};
 //   * Blob (binary)
 // - Footer (variable length)
 //   * Footer Magic Number (2 bytes)                    <<16#07, 16#E3>>  %% no meaning
-//   * Blob Checksum (md5) (16 bytes) (optional)
+//   * Blob Checksum (32 bytes) (optional)
 //   * Blob Age (1 byte)
 //   * Padding                                          Total hunk size is aligned to 8 byte boundary
 //
@@ -111,7 +109,7 @@ use std::io::{Cursor, Write};
 //   * BlobN (binary)
 // - Footer (variable length)
 //   * Footer Magic Number (2 bytes)                    <<16#07, 16#E3>>  %% no meaning
-//   * Blob Checksum (md5) (16 bytes) (optional)
+//   * Blob Checksum (32 bytes) (optional)
 //   * Blob Index (4 bytes * NumberOfBlobs, ubint)
 //   * Blob Ages  (1 byte * NumberOfBlobs, ubint))
 //   * Padding                                          Total hunk size is aligned to 8 byte boundary
@@ -141,12 +139,12 @@ const TYPE_BLOB_SINGLE: u8 = b's';
 const TYPE_BLOB_MULTI: u8 = b'p';  // "p" stands for "packed" blobs. ("m" is already taken)
 
 // Flags are stored in 1 byte space, so we can put up to 8 flags.
-const FLAG_NO_MD5: u8 = 0b_0000_0001;
+const FLAG_NO_CHECKSUM: u8 = 0b_0000_0001;
 
-// This storago file version uses MD5 (for now)
-const CHECKSUM_LEN: usize = 16;
+// Blake2b with digest length of 256 bits
+pub const CHECKSUM_LEN: usize = 32;
 
-type RawDigest = GenericArray<u8, U16>;
+type RawDigest = [u8; CHECKSUM_LEN];
 
 #[derive(Debug)]
 pub enum BoxedHunk {
@@ -186,7 +184,7 @@ pub struct BlobWalHunk {
     brick_name: String,
     flags: Vec<HunkFlag>,
     blobs: Vec<Blob>,
-    pub md5: Option<RawDigest>,
+    pub checksum: Option<RawDigest>,
 }
 
 #[derive(PartialEq, Debug)]
@@ -195,7 +193,7 @@ pub struct BlobSingleHunk {
     flags: Vec<HunkFlag>,
     blob: Blob,
     age: u8,
-    md5: Option<RawDigest>,
+    checksum: Option<RawDigest>,
 }
 
 #[derive(PartialEq, Debug)]
@@ -204,7 +202,7 @@ pub struct BlobMultiHunk {
     flags: Vec<HunkFlag>,
     blobs: Vec<Blob>,
     ages: Vec<u8>,
-    md5: Option<RawDigest>,
+    checksum: Option<RawDigest>,
 }
 
 #[derive(Debug)]
@@ -225,106 +223,106 @@ pub struct BinaryHunk {
 
 impl BlobWalHunk {
     pub fn new(brick_name: &str, blobs: Vec<Blob>, flags: &[HunkFlag]) -> Self {
-        let md5 = calc_checksum_of_blobs(&blobs, flags);
+        let checksum = calc_checksum_of_blobs(&blobs, flags);
         BlobWalHunk {
             hunk_type: HunkType::BlobWal,
             brick_name: brick_name.to_string(),
             flags: clone_flags(flags),
             blobs: blobs,
-            md5: md5,
+            checksum: checksum,
         }
     }
 
     pub fn new_with_checksum(brick_name: &str,
                              blobs: Vec<Blob>,
                              flags: Vec<HunkFlag>,
-                             md5: Option<RawDigest>)
+                             checksum: Option<RawDigest>)
                              -> Self {
         BlobWalHunk {
             hunk_type: HunkType::BlobWal,
             brick_name: brick_name.to_string(),
             flags: flags,
             blobs: blobs,
-            md5: md5,
+            checksum: checksum,
         }
     }
 }
 
 impl Hunk for BlobWalHunk {
     fn encode(self) -> BinaryHunk {
-        let BlobWalHunk { hunk_type, flags, brick_name, blobs, md5 } = self;
-        encode_hunk(hunk_type, flags, Some(brick_name), blobs, None, md5)
+        let BlobWalHunk { hunk_type, flags, brick_name, blobs, checksum } = self;
+        encode_hunk(hunk_type, flags, Some(brick_name), blobs, None, checksum)
     }
 }
 
 impl BlobSingleHunk {
     pub fn new(blob: Blob, flags: &[HunkFlag]) -> Self {
-        let md5 = calc_checksum_of_blob(&blob, flags);
+        let checksum = calc_checksum_of_blob(&blob, flags);
         BlobSingleHunk {
             hunk_type: HunkType::BlobSingle,
             flags: clone_flags(flags),
             blob: blob,
             age: 0,
-            md5: md5,
+            checksum: checksum,
         }
     }
 
     pub fn new_with_age_and_checksum(blob: Blob,
                                      flags: Vec<HunkFlag>,
                                      age: u8,
-                                     md5: Option<RawDigest>)
+                                     checksum: Option<RawDigest>)
                                      -> Self {
         BlobSingleHunk {
             hunk_type: HunkType::BlobSingle,
             flags: flags,
             blob: blob,
             age: age,
-            md5: md5,
+            checksum: checksum,
         }
     }
 }
 
 impl Hunk for BlobSingleHunk {
     fn encode(self) -> BinaryHunk {
-        let BlobSingleHunk { hunk_type, flags, blob, age, md5 } = self;
+        let BlobSingleHunk { hunk_type, flags, blob, age, checksum } = self;
         let blobs = vec![blob];
         let ages = vec![age];
-        encode_hunk(hunk_type, flags, None, blobs, Some(ages), md5)
+        encode_hunk(hunk_type, flags, None, blobs, Some(ages), checksum)
     }
 }
 
 impl BlobMultiHunk {
     pub fn new(blobs: Vec<Blob>, flags: &[HunkFlag]) -> Self {
-        let md5 = calc_checksum_of_blobs(&blobs, flags);
+        let checksum = calc_checksum_of_blobs(&blobs, flags);
         let ages = vec![0; blobs.len()];
         BlobMultiHunk {
             hunk_type: HunkType::BlobMulti,
             flags: clone_flags(flags),
             blobs: blobs,
             ages: ages,
-            md5: md5,
+            checksum: checksum,
         }
     }
 
     pub fn new_with_ages_and_checksum(blobs: Vec<Blob>,
                                       flags: Vec<HunkFlag>,
                                       ages: &[u8],
-                                      md5: Option<RawDigest>)
+                                      checksum: Option<RawDigest>)
                                       -> Self {
         BlobMultiHunk {
             hunk_type: HunkType::BlobMulti,
             flags: flags,
             blobs: blobs,
             ages: create_vec_u8_from_slice(ages),
-            md5: md5,
+            checksum: checksum,
         }
     }
 }
 
 impl Hunk for BlobMultiHunk {
     fn encode(self) -> BinaryHunk {
-        let BlobMultiHunk { hunk_type, flags, blobs, ages, md5 } = self;
-        encode_hunk(hunk_type, flags, None, blobs, Some(ages), md5)
+        let BlobMultiHunk { hunk_type, flags, blobs, ages, checksum } = self;
+        encode_hunk(hunk_type, flags, None, blobs, Some(ages), checksum)
     }
 }
 
@@ -334,7 +332,7 @@ pub fn calc_hunk_size(hunk_type: &HunkType,
                       number_of_blobs: u16,
                       total_blob_size: u32)
                       -> HunkSize {
-    let md5_size: u16 = if has_checksum(hunk_flags) { CHECKSUM_LEN as u16 } else { 0 };
+    let checksum_size: u16 = if has_checksum(hunk_flags) { CHECKSUM_LEN as u16 } else { 0 };
     let blob_index_size: u16 = if *hunk_type == HunkType::BlobSingle {
         0
     } else {
@@ -347,7 +345,7 @@ pub fn calc_hunk_size(hunk_type: &HunkType,
         0
     };
 
-    let footer_size = HUNK_MIN_FOOTER_SIZE as u16 + md5_size + brick_name_size + blob_index_size +
+    let footer_size = HUNK_MIN_FOOTER_SIZE as u16 + checksum_size + brick_name_size + blob_index_size +
                       blob_age_size;
     // raw_size includes footer_size.
     let raw_size = HUNK_HEADER_SIZE as u32 + total_blob_size + footer_size as u32;
@@ -367,10 +365,10 @@ fn encode_hunk(hunk_type: HunkType,
                brick_name: Option<String>,
                blobs: Vec<Blob>,
                blob_ages: Option<Vec<u8>>,
-               md5: Option<RawDigest>)
+               checksum: Option<RawDigest>)
                -> BinaryHunk {
     let (encoded_brick_name, brick_name_size) = encode_brick_name(brick_name);
-    if md5.is_none() {
+    if checksum.is_none() {
         assert!(!has_checksum(&flags))
     }
     let (blob_index, number_of_blobs) = create_blob_index(&blobs);
@@ -392,7 +390,7 @@ fn encode_hunk(hunk_type: HunkType,
     append_blobs(&mut hunk, blobs);
     append_hunk_footer(&mut hunk,
                        &hunk_type,
-                       md5,
+                       checksum,
                        encoded_brick_name,
                        &blob_ages,
                        &blob_index,
@@ -445,15 +443,15 @@ fn append_blobs(hunk: &mut Vec<u8>, blobs: Vec<Blob>) {
 
 fn append_hunk_footer(hunk: &mut Vec<u8>,
                       hunk_type: &HunkType,
-                      md5: Option<RawDigest>,
+                      checksum: Option<RawDigest>,
                       encoded_brick_name: Option<Vec<u8>>,
                       blob_ages: &Option<Vec<u8>>,
                       blob_index: &[u32],
                       padding_size: u8) {
     hunk.extend_from_slice(HUNK_FOOTER_MAGIC);
 
-    if let Some(md5) = md5 {
-        hunk.write_all(&md5).unwrap();
+    if let Some(checksum) = checksum {
+        hunk.write_all(&checksum).unwrap();
     }
     if *hunk_type == HunkType::Metadata || *hunk_type == HunkType::BlobWal {
         if let Some(mut bn) = encoded_brick_name {
@@ -491,9 +489,10 @@ fn has_checksum(flags: &[HunkFlag]) -> bool {
 fn calc_checksum_of_blob(blob: &Blob, flags: &[HunkFlag]) -> Option<RawDigest> {
     if has_checksum(flags) {
         let Blob(ref blob) = *blob;
-        let mut hasher = Md5::default();
-        hasher.input(blob);
-        Some(hasher.result())
+        let digest = blake2b(CHECKSUM_LEN, &[], blob);
+        let mut result = [0u8; CHECKSUM_LEN];
+        result.copy_from_slice(digest.as_bytes());
+        Some(result)
     } else {
         None
     }
@@ -501,11 +500,14 @@ fn calc_checksum_of_blob(blob: &Blob, flags: &[HunkFlag]) -> Option<RawDigest> {
 
 pub fn calc_checksum_of_blobs(blobs: &[Blob], flags: &[HunkFlag]) -> Option<RawDigest> {
     if has_checksum(flags) {
-        let mut hasher = Md5::default();
+        let mut hasher = Blake2b::new(CHECKSUM_LEN);
         for &Blob(ref blob) in blobs {
-            hasher.input(blob);
+            hasher.update(blob);
         }
-        Some(hasher.result())
+        let digest = hasher.finalize();
+        let mut result = [0u8; CHECKSUM_LEN];
+        result.copy_from_slice(digest.as_bytes());
+        Some(result)
     } else {
         None
     }
@@ -524,7 +526,7 @@ fn append_encoded_flags(hunk: &mut Vec<u8>, flags: &[HunkFlag]) {
     let mut encoded_flags = 0x00u8;
     for flag in flags {
         match *flag {
-            HunkFlag::NoChecksum => encoded_flags |= FLAG_NO_MD5,
+            HunkFlag::NoChecksum => encoded_flags |= FLAG_NO_CHECKSUM,
         }
     }
     hunk.push(encoded_flags);
@@ -601,7 +603,7 @@ fn decode_hunk(bin: &[u8], offset: usize) -> Result<(BoxedHunk, usize), (ParseEr
     let body_slice = &bin[header_size..footer_start];
     let footer_slice = &bin[footer_start..footer_end];
 
-    let ParseHunkFooterResult { md5, brick_name, blob_index_range, blob_ages_range } =
+    let ParseHunkFooterResult { checksum, brick_name, blob_index_range, blob_ages_range } =
         parse_hunk_footer(&hunk_type,
                           has_checksum(&flags),
                           brick_name_size,
@@ -614,7 +616,7 @@ fn decode_hunk(bin: &[u8], offset: usize) -> Result<(BoxedHunk, usize), (ParseEr
         HunkType::Metadata => unimplemented!(),
         HunkType::BlobWal => {
             let blobs = parse_hunk_body(body_slice, blob_index_slice, number_of_blobs).unwrap();
-            BoxedHunk::BlobWal(BlobWalHunk::new_with_checksum(&brick_name.unwrap(), blobs, flags, md5))
+            BoxedHunk::BlobWal(BlobWalHunk::new_with_checksum(&brick_name.unwrap(), blobs, flags, checksum))
         }
         HunkType::BlobSingle => {
             let blob = create_vec_u8_from_slice(body_slice);
@@ -623,7 +625,7 @@ fn decode_hunk(bin: &[u8], offset: usize) -> Result<(BoxedHunk, usize), (ParseEr
             BoxedHunk::BlobSingle(BlobSingleHunk::new_with_age_and_checksum(Blob(blob),
                                                                             flags,
                                                                             footer_slice[blob_ages_range.0],
-                                                                            md5))
+                                                                            checksum))
         }
         HunkType::BlobMulti => {
             let blobs = parse_hunk_body(body_slice, blob_index_slice, number_of_blobs).unwrap();
@@ -632,7 +634,7 @@ fn decode_hunk(bin: &[u8], offset: usize) -> Result<(BoxedHunk, usize), (ParseEr
             BoxedHunk::BlobMulti(BlobMultiHunk::new_with_ages_and_checksum(blobs,
                                                                            flags,
                                                                            blob_ages_slice,
-                                                                           md5))
+                                                                           checksum))
         }
     };
 
@@ -777,7 +779,7 @@ fn parse_hunk_body(blob_slice: &[u8],
 //
 
 struct ParseHunkFooterResult {
-    md5: Option<RawDigest>,
+    checksum: Option<RawDigest>,
     brick_name: Option<String>,
     blob_index_range: (usize, usize),
     blob_ages_range: Option<(usize, usize)>,
@@ -795,15 +797,15 @@ fn parse_hunk_footer(hunk_type: &HunkType,
 
     let mut offset = HUNK_FOOTER_MAGIC.len();
 
-    let md5;
+    let checksum;
     if has_checksum {
         let end_offset = offset + CHECKSUM_LEN as usize;
-        let mut out = GenericArray::default();
-        &mut out[..].copy_from_slice(&footer_slice[offset..end_offset]);
-        md5 = Some(out);
+        let mut result = [0u8; CHECKSUM_LEN];
+        result.copy_from_slice(&footer_slice[offset..end_offset]);
+        checksum = Some(result);
         offset = end_offset;
     } else {
-        md5 = None;
+        checksum = None;
     }
 
     let brick_name;
@@ -829,7 +831,7 @@ fn parse_hunk_footer(hunk_type: &HunkType,
     }
 
     Ok(ParseHunkFooterResult {
-        md5: md5,
+        checksum: checksum,
         brick_name: brick_name,
         blob_index_range: blob_index_range,
         blob_ages_range: blob_ages_range,
@@ -909,7 +911,7 @@ fn decode_type(hunk_type: u8) -> Result<HunkType, ParseError> {
 
 fn decode_flags(flags: u8) -> Result<Vec<HunkFlag>, ParseError> {
     let mut decoded_flags = Vec::new();
-    if flags & FLAG_NO_MD5 != 0 {
+    if flags & FLAG_NO_CHECKSUM != 0 {
         decoded_flags.push(HunkFlag::NoChecksum);
     }
     Ok(decoded_flags)
@@ -944,8 +946,11 @@ mod tests {
     use super::{decode_hunks, BinaryHunk, Blob, BlobWalHunk, BlobSingleHunk, BlobMultiHunk,
                 BoxedHunk, Hunk, HunkFlag, ParseError};
 
+    // Blake2s checksum can be generated by:
+    //   python3 -c "import hashlib; print(hashlib.blake2b(b'Hello, world!', digest_size=32).hexdigest())"
+
     #[test]
-    fn test_endoce_hunks() {
+    fn test_encode_hunks() {
         let brick_name = "brick1";
         let blob1_src = b"Hello";
         let blob2_src = b", ";
@@ -1000,23 +1005,39 @@ mod tests {
                                 // footer magic numbers
                                 0x07,
                                 0xE3,
-                                // check-sum (md5)
-                                108,
-                                211,
-                                85,
-                                109,
-                                235,
-                                13,
-                                165,
-                                75,
-                                202,
-                                6,
-                                11,
-                                76,
-                                57,
-                                71,
-                                152,
-                                57,
+                                // checksum
+                                0xB5,
+                                0xDA,
+                                0x44,
+                                0x1C,
+                                0xFE,
+                                0x72,
+                                0xAE,
+                                0x04,
+                                0x2E,
+                                0xF4,
+                                0xD2,
+                                0xB1,
+                                0x77,
+                                0x42,
+                                0x90,
+                                0x7F,
+                                0x67,
+                                0x5D,
+                                0xE4,
+                                0xDA,
+                                0x57,
+                                0x46,
+                                0x2D,
+                                0x4C,
+                                0x36,
+                                0x09,
+                                0xC2,
+                                0xE2,
+                                0xED,
+                                0x75,
+                                0x59,
+                                0x70,
                                 // brick name
                                 b'b',
                                 b'r',
@@ -1080,7 +1101,7 @@ mod tests {
                                 // footer magic numbers
                                 0x07,
                                 0xE3,
-                                // no check-sum (md5)
+                                // no checksum
                                 // no blob offset
                                 // padding, total 16 bytes
                                 0x00,
@@ -1140,23 +1161,39 @@ mod tests {
                               // footer magic numbers
                               0x07,
                               0xE3,
-                              // check-sum (md5)
-                              108,
-                              211,
-                              85,
-                              109,
-                              235,
-                              13,
-                              165,
-                              75,
-                              202,
-                              6,
-                              11,
-                              76,
-                              57,
-                              71,
-                              152,
-                              57,
+                              // checksum
+                              0xB5,
+                              0xDA,
+                              0x44,
+                              0x1C,
+                              0xFE,
+                              0x72,
+                              0xAE,
+                              0x04,
+                              0x2E,
+                              0xF4,
+                              0xD2,
+                              0xB1,
+                              0x77,
+                              0x42,
+                              0x90,
+                              0x7F,
+                              0x67,
+                              0x5D,
+                              0xE4,
+                              0xDA,
+                              0x57,
+                              0x46,
+                              0x2D,
+                              0x4C,
+                              0x36,
+                              0x09,
+                              0xC2,
+                              0xE2,
+                              0xED,
+                              0x75,
+                              0x59,
+                              0x70,
                               // brick name
                               b'b',
                               b'r',
