@@ -20,9 +20,13 @@
 #[macro_use]
 extern crate lazy_static;
 
+#[macro_use]
+extern crate log;
+
 extern crate byteorder;
 extern crate chrono;
 extern crate crypto;
+extern crate env_logger;
 extern crate promising_future;
 extern crate rand;
 extern crate rmp_serialize as msgpack;

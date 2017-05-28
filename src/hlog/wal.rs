@@ -14,12 +14,15 @@
 //  limitations under the License.
 // ----------------------------------------------------------------------
 
+// TODO: Implement group commit.
+
+
 use promising_future::{future_promise, Promise, Future};
 
 use std::io::prelude::*;
 
 use std::fs::File;
-use std::io::{self, BufWriter, SeekFrom};
+use std::io::{self, BufReader, BufWriter, SeekFrom};
 
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -33,8 +36,6 @@ use rustc_serialize::hex::ToHex;
 // use hlog::blob_store;
 use hlog::hunk::{self, BinaryHunk, Blob, BlobWalHunk, Hunk, HunkSize, HunkType};
 
-// Consts / Statics
-
 // TODO: Configurable (Also see https://doc.rust-lang.org/nightly/std/env/fn.temp_dir.html )
 pub const WAL_PATH: &'static str = "/tmp/hibari-brick-test-data-wal";
 
@@ -44,8 +45,6 @@ lazy_static! {
 
 // Thread local for client threads
 thread_local!(static LOCAL_Q: Sender<Request> = WAL_WRITER.queue.lock().unwrap().clone());
-
-// Types, Structs
 
 pub type SeqNum = u32;
 pub type HunkOffset = u64;
@@ -65,6 +64,7 @@ pub enum Request {
         promise: Promise<io::Result<PutBlobResult>>,
     },
     Flush(Promise<FlushPosition>),
+    GetCurrentSeqNumAndDiskPos(Promise<(SeqNum, HunkOffset)>),
     Shutdown(Promise<bool>),
 }
 
@@ -147,7 +147,6 @@ impl WalWriter {
         future.value().unwrap()
     }
 
-    // Executed by the WAL thread
     pub fn put_value(brick_id: BrickId, key: Vec<u8>, value: Vec<u8>) -> Future<io::Result<PutBlobResult>> {
         let (future, prom) = future_promise();
         let req = Request::PutBlob {
@@ -189,14 +188,23 @@ impl WalWriter {
         Ok(Some(buf))
     }
 
-    // Executed by the WAL thread
     pub fn flush() {
         let (future, prom) = future_promise();
         send(Request::Flush(prom)).unwrap();
         future.value().unwrap();
     }
 
-    // Executed by the WAL thread
+    pub fn get_current_seq_num_and_disk_pos() -> (SeqNum, HunkOffset) {
+        let (future, prom) = future_promise();
+        send(Request::GetCurrentSeqNumAndDiskPos(prom)).unwrap();
+        future.value().unwrap()
+    }
+
+    pub fn open_wal_for_read(_seq_num: SeqNum) -> io::Result<BufReader<File>> {
+        let f = File::open(WAL_PATH)?;
+        Ok(BufReader::new(f))
+    }
+
     pub fn shutdown() {
         let (future, prom) = future_promise();
         send(Request::Shutdown(prom)).unwrap();
@@ -204,7 +212,7 @@ impl WalWriter {
     }
 }
 
-// Drop will never called because it is the WalWriter is bound to static?
+// Drop will never be called because it is the WalWriter is bound to static?
 impl Drop for WalWriter {
     fn drop(&mut self) {
         WalWriter::shutdown();
@@ -252,11 +260,16 @@ fn handle_requests(rx: Receiver<Request>, mut writer: BufWriter<File>) {
                 writer.flush().unwrap();
                 promise.set(FlushPosition { pos: pos });
             }
+            Request::GetCurrentSeqNumAndDiskPos(promise) => {
+                // flush to ensure all bytes up to `pos` are available for reading.
+                writer.flush().unwrap();
+                promise.set((0, pos));
+            }
             Request::Shutdown(promise) => {
                 writer.flush().unwrap();
                 super::write_back::WriteBack::shutdown();
                 promise.set(true);
-                break;  // break from the event loop.
+                break;  // exit from the event loop.
             }
         }
     }

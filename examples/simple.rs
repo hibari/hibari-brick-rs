@@ -18,6 +18,7 @@
 #![cfg_attr(feature="clippy", plugin(clippy))]
 
 extern crate hibari_brick_rs as brick;
+extern crate env_logger;
 
 use std::thread;
 use std::sync::Arc;
@@ -26,6 +27,8 @@ const NUM_THREADS: u32 = 50;
 const NUM_KEYS_PER_THREAD: u32 = 50_000;
 
 fn main() {
+    env_logger::init().unwrap();
+
     let brick_name = "brick1";
     let brick_id = brick::add_brick(brick_name);
 

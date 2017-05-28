@@ -545,15 +545,20 @@ fn total_blob_size(blobs: &[Blob]) -> u32 {
 }
 
 // ---------------------------------------------------------------------------
-pub fn decode_hunks(bin: &[u8]) -> Result<(Vec<BoxedHunk>, usize), (ParseError, usize)> {
+pub fn decode_hunks(bin: &[u8], start_offset: usize) -> Result<(Vec<BoxedHunk>, usize), (ParseError, usize)> {
     let mut hunks = Vec::new();
-    let mut offset = 0;
+    let mut offset = start_offset;
     while offset < bin.len() {
-        let (hunk, new_offset) = decode_hunk(bin, 0).unwrap();
-        hunks.push(hunk);
-        offset = new_offset;
+        match decode_hunk(bin, offset) {
+            Ok((hunk, next_offset)) => {
+                // debug!("decode_hunks: decoded hunk at {}. next offset: {}", offset, next_offset);
+                hunks.push(hunk);
+                offset = next_offset;
+            }
+            Err((ParseError, _)) => break,
+        }
     }
-    Ok((hunks, 0))
+    Ok((hunks, offset))
 }
 
 // -spec parse_hunks(binary()) -> {ok, [hunk()], Remainder::binary()}
@@ -593,10 +598,13 @@ fn decode_hunk(bin: &[u8], offset: usize) -> Result<(BoxedHunk, usize), (ParseEr
                                                                     number_of_blobs,
                                                                     total_blob_size);
 
-    // if remainder_size < 0 ...
     let footer_start = header_size + total_blob_size as usize;
     let footer_end = footer_start + footer_size as usize + padding_size as usize;
     let new_offset = offset + footer_end;
+    if bin.len() < footer_end {
+        debug!("bin.len: {}, footer_end: {}", bin.len(), footer_end);
+        return Err((ParseError, offset));
+    }
 
     let body_slice = &bin[header_size..footer_start];
     let footer_slice = &bin[footer_start..footer_end];
