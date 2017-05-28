@@ -26,6 +26,7 @@ use std::sync::Mutex;
 use std::sync::mpsc::{channel, Sender, SendError, Receiver};
 use std::thread;
 
+use blake2_rfc::blake2b::Blake2b;
 use data_encoding::HEXLOWER;
 use rmps::Serializer;
 use serde::Serialize;
@@ -62,6 +63,7 @@ pub enum Request {
         brick_id: BrickId,
         key: Vec<u8>,
         value: Vec<u8>,
+        hasher: Option<Blake2b>,
         promise: Promise<PutBlobResult>,
     },
     Flush(Promise<FlushPosition>),
@@ -149,11 +151,17 @@ impl WalWriter {
 
     // Executed by the WAL thread
     pub fn put_value(brick_id: BrickId, key: Vec<u8>, value: Vec<u8>) -> Future<PutBlobResult> {
+        // if !NoChecksum
+
+        let mut hasher = Blake2b::new(hunk::CHECKSUM_LEN);
+        hasher.update(&value[..]);
+
         let (future, prom) = future_promise();
         let req = Request::PutBlob {
             brick_id: brick_id,
             key: key,
             value: value,
+            hasher: Some(hasher),
             promise: prom,
         };
         send(req).unwrap();
@@ -185,6 +193,8 @@ impl WalWriter {
             size = chunk.read_to_end(&mut buf)?;
         }
         assert_eq!(val_len as usize, size);
+
+        // TODO: Verify the checksum
 
         Ok(Some(buf))
     }
@@ -226,7 +236,7 @@ fn process_requests(rx: Receiver<Request>, mut writer: BufWriter<File>) {
                 let maybe_id = brick_ids.get(&brick_name).map(|id| id.to_owned());
                 promise.set(maybe_id);
             }
-            Request::PutBlob { brick_id, value, promise, .. } => {
+            Request::PutBlob { brick_id, value, hasher, promise, .. } => {
                 // TODO: Bound check
                 let mut brick_info = &mut brick_info_v[brick_id];
                 let brick_name = brick_info.brick_name.to_string();
@@ -234,7 +244,8 @@ fn process_requests(rx: Receiver<Request>, mut writer: BufWriter<File>) {
                 if let Ok(wal_position) = do_put_blob(&mut writer,
                                                       &mut pos,
                                                       &mut brick_info,
-                                                      value) {
+                                                      value,
+                                                      hasher) {
                     let result = PutBlobResult {
                         brick_name: brick_name,
                         storage_position: wal_position,
@@ -291,9 +302,10 @@ fn do_add_brick(brick_name: &str,
 fn do_put_blob(writer: &mut BufWriter<File>,
                mut pos: &mut HunkOffset,
                mut brick_info: &mut BrickInfo,
-               value: Vec<u8>)
+               value: Vec<u8>,
+               hasher: Option<Blake2b>)
                -> Result<WalPosition, ()> {
-    let hunk_flags = [];
+    let hunk_flags = Vec::new();
     let val_len = value.len() as Len;
 
     let private_seqnum = brick_info.head_seqnum;
@@ -307,10 +319,23 @@ fn do_put_blob(writer: &mut BufWriter<File>,
     let mut encoded_pos: Vec<u8> = Vec::new();
     private_hlog_pos.serialize(&mut Serializer::new(&mut encoded_pos)).unwrap();
 
+    let checksum =
+        // if !NoChecksum
+        if let Some(mut hasher) = hasher {
+            hasher.update(&encoded_pos[..]);
+            let digest = hasher.finalize();
+            let mut result = [0u8; hunk::CHECKSUM_LEN];
+            result.copy_from_slice(digest.as_bytes());
+            Some(result)
+        } else {
+            None
+        };
+
     let blobs = vec![Blob(value), Blob(encoded_pos)];
 
-    let hunk = BlobWalHunk::new(&brick_info.brick_name, blobs, &hunk_flags);
-    let maybe_checksum_string = hunk.md5.as_ref().map(|digest| HEXLOWER.encode(&digest[..]));
+    let hunk = BlobWalHunk::new_with_checksum(&brick_info.brick_name, blobs, hunk_flags.clone(), checksum);
+    // let maybe_checksum_string = hunk.md5.as_ref().map(|digest| HEXLOWER.encode(&digest[..]));
+    let maybe_checksum_string = checksum.map(|digest| HEXLOWER.encode(&digest[..]));
 
     let BinaryHunk { hunk: binary_hunk, hunk_size, blob_index, .. } = hunk.encode();
     writer.write_all(&binary_hunk[..]).unwrap();
