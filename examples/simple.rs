@@ -33,13 +33,15 @@ fn main() {
     let brick_id = brick::add_brick(brick_name);
 
     let put_op = |brick_id: brick::BrickId, key_str: &str, key: &[u8], value: &[u8]| {
-        brick::put(brick_id, key.to_vec(), value.to_vec())
+        let mut large_value = vec![0; 8 * 1024];
+        large_value[..value.len()].copy_from_slice(value);
+        brick::put(brick_id, key.to_vec(), large_value)
             .expect(&format!("Failed to put a key {}", key_str));
     };
 
     let get_op = |brick_id: brick::BrickId, key_str: &str, key: &[u8], value: &[u8]| {
         let val = brick::get(brick_id, key).expect(&format!("Failed to get a key {}", key_str));
-        assert_eq!(value.to_vec(), val.unwrap());
+        assert_eq!(value, &val.unwrap()[..value.len()]);
     };
 
     do_ops(brick_id, NUM_THREADS, NUM_KEYS_PER_THREAD, "put", put_op);

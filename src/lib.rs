@@ -23,27 +23,27 @@ extern crate lazy_static;
 #[macro_use]
 extern crate log;
 
+#[macro_use]
+extern crate serde_derive;
+
+extern crate blake2_rfc;
 extern crate byteorder;
 extern crate chrono;
-extern crate crypto;
+extern crate data_encoding;
 extern crate env_logger;
 extern crate promising_future;
 extern crate rand;
-extern crate rmp_serialize as msgpack;
+extern crate rmp_serde as rmps;
 extern crate rocksdb;
-extern crate rustc_serialize;
+extern crate serde;
 extern crate timer;
 
-use crypto::digest::Digest;
-use crypto::md5::Md5;
-
-use msgpack::{Encoder, Decoder};
+use rmps::{Deserializer, Serializer};
 use rocksdb::{DB, Options};
-use rustc_serialize::{Encodable, Decodable};
+use serde::{Deserialize, Serialize};
 
 use std::io;
 
-//
 // cargo rustc --lib -- -Z unstable-options --unpretty=''hir,typed'' (zsh)
 // cargo rustc --lib -- -Z unstable-options --unpretty=hir,typed     (bash)
 // cargo rustc --lib -- -Z unstable-options --unpretty=mir
@@ -57,13 +57,9 @@ pub mod hlog {
 pub use hlog::wal::BrickId;
 use hlog::wal::{PutBlobResult, WalPosition, WalWriter};
 
-// Type Defs
-
 pub type Etag = String;
 // pub type Metadata
 // pub type TTL
-
-// Consts / Statics
 
 // TODO: Configurable
 const MAIN_DB_PATH: &'static str = "/tmp/hibari-brick-test-data-rocksdb";
@@ -77,10 +73,6 @@ lazy_static! {
     };
 }
 
-// Structs
-
-// Public API
-
 pub fn add_brick(brick_name: &str) -> BrickId {
     WalWriter::add_brick(brick_name)
 }
@@ -89,30 +81,25 @@ pub fn get_brick_id(brick_name: &str) -> Option<BrickId> {
     WalWriter::get_brick_id(brick_name)
 }
 
-pub fn put(brick_id: BrickId, key: Vec<u8>, value: Vec<u8>) -> io::Result<Etag> {
-    // calculate md5
-    let mut md5_hasher = Md5::new();
-    md5_hasher.input(&value);
-    let md5_str = md5_hasher.result_str();
-
+pub fn put(brick_id: BrickId, key: Vec<u8>, value: Vec<u8>) -> io::Result<()> {
     // write blob to WAL
     let future = WalWriter::put_value(brick_id, key.to_vec(), value);
     let PutBlobResult { storage_position, .. } = future.value().unwrap().unwrap();
 
     // write metadata to RocksDB
     let mut buf: Vec<u8> = Vec::new();
-    storage_position.encode(&mut Encoder::new(&mut buf)).unwrap();
+    storage_position.serialize(&mut Serializer::new(&mut buf)).unwrap();
     MAIN_DB.put(&key, &buf[..]).unwrap();
 
-    Ok(md5_str)
+    Ok(())
 }
 
 pub fn get(brick_id: BrickId, key: &[u8]) -> io::Result<Option<Vec<u8>>> {
     // read from RocksDB
     let res = MAIN_DB.get(key);
     let encoded_position = res.unwrap().unwrap();
-    let mut decoder = Decoder::new(&encoded_position[..]);
-    let storage_position: WalPosition = Decodable::decode(&mut decoder).ok().unwrap();
+    let mut decoder = Deserializer::new(&encoded_position[..]);
+    let storage_position: WalPosition = Deserialize::deserialize(&mut decoder).ok().unwrap();
 
     WalWriter::get_value(brick_id, &storage_position)
 }
@@ -131,11 +118,8 @@ mod tests {
         let brick_name = "brick1";
         let brick_id = add_brick(brick_name);
 
-        let etag = put(brick_id, b"key1".to_vec(), b"val1".to_vec());
-        assert_eq!("8de92ce2033cf3ca03fa8cc63e7a703f".to_string(),
-                   etag.unwrap());
-
-        let _etag3 = put(brick_id, b"key2".to_vec(), b"val2".to_vec());
+        put(brick_id, b"key1".to_vec(), b"val1".to_vec()).unwrap();
+        put(brick_id, b"key2".to_vec(), b"val2".to_vec()).unwrap();
 
         let value2 = get(brick_id, b"key1");
         let mut expected = Vec::new();
