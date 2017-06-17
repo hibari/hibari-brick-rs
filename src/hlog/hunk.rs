@@ -1068,11 +1068,12 @@ mod tests {
                                 0x00,
                                 0x00,
                                 0x13,
-                                // padding, total 64 bytes
+                                // padding, total 80 bytes
                                 0x00,
                                 0x00,
                                 0x00];
             assert_eq!(expected, binary_hunk);
+            assert_eq!(80, binary_hunk.len());
         }
 
         {
@@ -1115,6 +1116,7 @@ mod tests {
                                 0x00,
                                 0x00];
             assert_eq!(expected, binary_hunk);
+            assert_eq!(16, binary_hunk.len());
         }
 
         {
@@ -1224,26 +1226,23 @@ mod tests {
                               0x00,
                               0x00,
                               0x13,
-                              // padding, total 64 bytes
+                              // padding, total 80 bytes
                               0x00,
                               0x00,
                               0x00];
-            let result = decode_hunks(&binary);
-            if let Ok((boxed_hunks, _offset)) = result {
-                if let &BoxedHunk::BlobWal(ref hunk) = &boxed_hunks[0] {
-                    let blobs =
-                        vec![make_blob(blob1_src), make_blob(blob2_src), make_blob(blob3_src)];
-                    let expected = BlobWalHunk::new(brick_name, blobs, &hunk_flags);
-                    assert_eq!(&expected, hunk);
-                } else {
-                    panic!("boxed_hunk[0] is not a BlobWalHunk");
-                }
-            } else {
-                if let Err((ParseError, _offset)) = result {
-                    panic!("result is Err(..)");
-                } else {
-                    unreachable!();
-                }
+            assert_eq!(80, binary.len());
+
+            match decode_hunks(&binary, 0) {
+                Ok((boxed_hunks, _offset)) =>
+                    if let &BoxedHunk::BlobWal(ref hunk) = &boxed_hunks[0] {
+                        let blobs =
+                            vec![make_blob(blob1_src), make_blob(blob2_src), make_blob(blob3_src)];
+                        let expected = BlobWalHunk::new(brick_name, blobs, &hunk_flags);
+                        assert_eq!(&expected, hunk);
+                    } else {
+                        panic!("boxed_hunk[0] is not a BlobWalHunk");
+                    },
+                Err((ParseError, _offset)) => unreachable!(),
             }
         }
     }

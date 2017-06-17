@@ -21,10 +21,11 @@ use promising_future::{future_promise, Promise, Future};
 
 use std::io::prelude::*;
 
+use std::collections::HashMap;
+use std::env;
 use std::fs::File;
 use std::io::{self, BufReader, BufWriter, SeekFrom};
-
-use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Mutex;
 use std::sync::mpsc::{channel, Sender, SendError, Receiver};
 use std::thread;
@@ -37,10 +38,20 @@ use serde::Serialize;
 // use hlog::blob_store;
 use hlog::hunk::{self, BinaryHunk, Blob, BlobWalHunk, Hunk, HunkSize, HunkType};
 
-// TODO: Configurable (Also see https://doc.rust-lang.org/nightly/std/env/fn.temp_dir.html )
-pub const WAL_PATH: &'static str = "/tmp/hibari-brick-test-data-wal";
-
 lazy_static! {
+    // TODO: Configurable
+    static ref WAL_PATH: PathBuf = {
+        // "$HOME/hibari-brick-test-data/wal" or "/tmp/hibari-brick-test-data/wal"
+        let mut path = PathBuf::from(env::var("HOME").unwrap_or("/tmp".to_string()));
+        path.push("hibari-brick-test-data");
+
+        super::super::utils::create_dir_if_missing(path.as_path())
+            .expect(&format!("Could not create the WAL directory: {:?}", path));
+
+        path.push("wal");
+        path
+    };
+
     static ref WAL_WRITER: WalWriter = WalWriter::new();
 }
 
@@ -129,7 +140,7 @@ impl WalWriter {
             //     .write(true)
             //     .create(true)
             //     .open(WAL_PATH).unwrap();
-            let f = File::create(WAL_PATH).unwrap();
+            let f = File::create(WAL_PATH.as_path()).unwrap();
             let writer = BufWriter::new(f);
             handle_requests(rx, writer);
         });
@@ -175,7 +186,7 @@ impl WalWriter {
         let position = wal_position.wal_hunk_pos + wal_position.val_offset as u64;
 
         // read blob (from HLog or WAL)
-        let mut f = File::open(WAL_PATH)?;
+        let mut f = File::open(WAL_PATH.as_path())?;
         let mut pos = f.seek(SeekFrom::Start(position))?;
         if pos < position {
             WalWriter::flush();
@@ -211,7 +222,7 @@ impl WalWriter {
     }
 
     pub fn open_wal_for_read(_seq_num: SeqNum) -> io::Result<BufReader<File>> {
-        let f = File::open(WAL_PATH)?;
+        let f = File::open(WAL_PATH.as_path())?;
         Ok(BufReader::new(f))
     }
 
@@ -342,7 +353,7 @@ fn do_put_blob(writer: &mut BufWriter<File>,
     let maybe_checksum_string = checksum.map(|digest| HEXLOWER.encode(&digest[..]));
 
     let BinaryHunk { hunk: binary_hunk, hunk_size, blob_index, .. } = hunk.encode();
-    writer.write_all(&binary_hunk[..]).unwrap();
+    writer.write_all(&binary_hunk[..])?;
 
     let wal_position = WalPosition {
         wal_seqnum: 0,

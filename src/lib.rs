@@ -42,12 +42,14 @@ use rmps::{Deserializer, Serializer};
 use rocksdb::{DB, Options};
 use serde::{Deserialize, Serialize};
 
-use std::io;
+use std::{env, io};
+use std::path::PathBuf;
 
 // cargo rustc --lib -- -Z unstable-options --unpretty=''hir,typed'' (zsh)
 // cargo rustc --lib -- -Z unstable-options --unpretty=hir,typed     (bash)
 // cargo rustc --lib -- -Z unstable-options --unpretty=mir
 
+pub mod utils;
 pub mod hlog {
     pub mod hunk;
     pub mod wal;
@@ -61,15 +63,25 @@ pub type Etag = String;
 // pub type Metadata
 // pub type TTL
 
-// TODO: Configurable
-const MAIN_DB_PATH: &'static str = "/tmp/hibari-brick-test-data-rocksdb";
-
 lazy_static! {
+    // TODO: Configurable
+    static ref MAIN_DB_PATH: PathBuf = {
+        // "$HOME/hibari-brick-test-data/rocksdb" or "/tmp/hibari-brick-test-data/rocksdb"
+        let mut path = PathBuf::from(env::var("HOME").unwrap_or("/tmp".to_string()));
+        path.push("hibari-brick-test-data");
+
+        utils::create_dir_if_missing(path.as_path())
+            .expect(&format!("Could not create the WAL directory: {:?}", path));
+
+        path.push("rocksdb");
+        path
+    };
+
     static ref MAIN_DB: DB = {
         let mut opts = Options::default();
         opts.create_if_missing(true);
 
-        DB::open(&opts, MAIN_DB_PATH).unwrap()
+        DB::open(&opts, MAIN_DB_PATH.as_path()).unwrap()
     };
 }
 

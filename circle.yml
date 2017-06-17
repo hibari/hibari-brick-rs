@@ -45,8 +45,11 @@ test:
     - rustup run stable cargo clean
     - rustup run stable cargo test --jobs $CI_NUM_JOBS --release:
         timeout: 900
+    - rm -rf $HOME/hibari-brick-test-data
     - rustup run stable cargo run --release --example simple
+    - rm -rf $HOME/hibari-brick-test-data
     - rustup run beta cargo clean
     - rustup run beta cargo test --jobs $CI_NUM_JOBS --release:
         timeout: 900
+    - rm -rf $HOME/hibari-brick-test-data
     - rustup run beta cargo run --release --example simple

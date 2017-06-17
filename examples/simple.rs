@@ -25,6 +25,7 @@ use std::sync::Arc;
 
 const NUM_THREADS: u32 = 50;
 const NUM_KEYS_PER_THREAD: u32 = 50_000;
+const VALUE_SIZE: usize = 1024;
 
 fn main() {
     env_logger::init().unwrap();
@@ -33,15 +34,19 @@ fn main() {
     let brick_id = brick::add_brick(brick_name);
 
     let put_op = |brick_id: brick::BrickId, key_str: &str, key: &[u8], value: &[u8]| {
-        let mut large_value = vec![0; 8 * 1024];
+        let mut large_value = vec![0; VALUE_SIZE];
         large_value[..value.len()].copy_from_slice(value);
+
         brick::put(brick_id, key.to_vec(), large_value)
             .expect(&format!("Failed to put a key {}", key_str));
     };
 
     let get_op = |brick_id: brick::BrickId, key_str: &str, key: &[u8], value: &[u8]| {
-        let val = brick::get(brick_id, key).expect(&format!("Failed to get a key {}", key_str));
-        assert_eq!(value, &val.unwrap()[..value.len()]);
+        let val = brick::get(brick_id, key)
+            .expect(&format!("Failed to get a key {}", key_str))
+            .expect(&format!("Value for key {} is None", key_str));
+        assert_eq!(VALUE_SIZE, val.len());
+        assert_eq!(value, &val[..value.len()]);
     };
 
     do_ops(brick_id, NUM_THREADS, NUM_KEYS_PER_THREAD, "put", put_op);

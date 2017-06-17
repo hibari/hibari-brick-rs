@@ -145,11 +145,11 @@ fn write_back_wal(seq_num: SeqNum,
                   end_pos: HunkOffset, 
                   block_size: u64) -> io::Result<HunkOffset> {
     let mut f = WalWriter::open_wal_for_read(seq_num)?;
-    let mut cur_pos = f.seek(SeekFrom::Start(start_pos))?;
+    let /* mut */ cur_pos = f.seek(SeekFrom::Start(start_pos))?;
     assert_eq!(cur_pos, start_pos);
 
-    let mut buf = vec![0u8; block_size as usize];
-    let mut read_offset = 0;
+    let /* mut */ _buf = vec![0u8; block_size as usize];
+    let /* mut */ _read_offset = 0;
 
     /*
     while cur_pos < end_pos {
@@ -179,6 +179,7 @@ fn write_back_wal(seq_num: SeqNum,
     Ok(end_pos)
 }
 
+#[allow(dead_code)]
 fn write_back_block(bin: &[u8]) -> Result<usize, (hunk::ParseError, usize)> {
     let (hunks, next_offset) = hunk::decode_hunks(bin, 0)?;
     debug!("Write back: decoded {} hunks. Remaining {} bytes.",
