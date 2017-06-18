@@ -67,7 +67,8 @@ lazy_static! {
     // TODO: Configurable
     static ref MAIN_DB_PATH: PathBuf = {
         // "$HOME/hibari-brick-test-data/rocksdb" or "/tmp/hibari-brick-test-data/rocksdb"
-        let mut path = PathBuf::from(env::var("HOME").unwrap_or("/tmp".to_string()));
+        let mut path = PathBuf::from(env::var("HOME")
+            .unwrap_or_else(|_| "/tmp".to_string()));
         path.push("hibari-brick-test-data");
 
         utils::create_dir_if_missing(path.as_path())
@@ -93,7 +94,7 @@ pub fn get_brick_id(brick_name: &str) -> Option<BrickId> {
     WalWriter::get_brick_id(brick_name)
 }
 
-pub fn put(brick_id: BrickId, key: Vec<u8>, value: Vec<u8>) -> io::Result<()> {
+pub fn put(brick_id: BrickId, key: &[u8], value: Vec<u8>) -> io::Result<()> {
     // write blob to WAL
     let future = WalWriter::put_value(brick_id, key.to_vec(), value);
     let PutBlobResult { storage_position, .. } = future.value().unwrap().unwrap();
@@ -101,7 +102,7 @@ pub fn put(brick_id: BrickId, key: Vec<u8>, value: Vec<u8>) -> io::Result<()> {
     // write metadata to RocksDB
     let mut buf: Vec<u8> = Vec::new();
     storage_position.serialize(&mut Serializer::new(&mut buf)).unwrap();
-    MAIN_DB.put(&key, &buf[..]).unwrap();
+    MAIN_DB.put(key, &buf[..]).unwrap();
 
     Ok(())
 }
@@ -122,16 +123,21 @@ pub fn shutdown() {
 
 #[cfg(test)]
 mod tests {
-    use super::{add_brick, get, put};
-    use super::hlog::wal::WalWriter;
+    extern crate env_logger;
 
+    use super::{add_brick, get, put, shutdown};
+
+    // This test will fail with "pure virtual function called" if `--release` flag is NOT given.
+    // There may be problem around using task queue with lazy static?
     #[test]
     fn test_put_get() {
+        let _ = env_logger::init();
+
         let brick_name = "brick1";
         let brick_id = add_brick(brick_name);
 
-        put(brick_id, b"key1".to_vec(), b"val1".to_vec()).unwrap();
-        put(brick_id, b"key2".to_vec(), b"val2".to_vec()).unwrap();
+        put(brick_id, b"key1", b"val1".to_vec()).unwrap();
+        put(brick_id, b"key2", b"val2".to_vec()).unwrap();
 
         let value2 = get(brick_id, b"key1");
         let mut expected = Vec::new();
@@ -144,7 +150,7 @@ mod tests {
 
         assert_eq!(expected, value3.unwrap().unwrap());
 
-        WalWriter::shutdown();
+        shutdown();
     }
 
 }

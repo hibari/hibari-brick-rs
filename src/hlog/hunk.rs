@@ -35,7 +35,7 @@ use std::io::{Cursor, Write};
 //   * Body          (variable length)
 //   * Footer        (variable length)
 //     ** ...
-//     ** Padding    (variable length)           Hunk size is aligned to 8 bytes
+//     ** Padding    (variable length)           Next Hunk should be aligned to 8 byte boundary
 // - Hunk 2
 //   * ...
 // - ...
@@ -58,7 +58,7 @@ use std::io::{Cursor, Write};
 //   * TotalBlobSize (4 bytes, ubnit)                    Max value size is (4 GB - 1 byte)
 //
 //
-// Hunk Layout - metadata; many blobs in one hunk
+// Hunk Layout - metadata; many blobs in one hunk (OBSOLETE)
 // - Header (12 bytes, fixed length, see above for details)
 // - Body (variable length)
 //   * BrickName (binary)
@@ -251,7 +251,7 @@ impl BlobWalHunk {
 impl Hunk for BlobWalHunk {
     fn encode(self) -> BinaryHunk {
         let BlobWalHunk { hunk_type, flags, brick_name, blobs, checksum } = self;
-        encode_hunk(hunk_type, flags, Some(brick_name), blobs, None, checksum)
+        encode_hunk(hunk_type, &flags[..], Some(brick_name), blobs, &None, checksum)
     }
 }
 
@@ -287,7 +287,7 @@ impl Hunk for BlobSingleHunk {
         let BlobSingleHunk { hunk_type, flags, blob, age, checksum } = self;
         let blobs = vec![blob];
         let ages = vec![age];
-        encode_hunk(hunk_type, flags, None, blobs, Some(ages), checksum)
+        encode_hunk(hunk_type, &flags[..], None, blobs, &Some(ages), checksum)
     }
 }
 
@@ -322,7 +322,7 @@ impl BlobMultiHunk {
 impl Hunk for BlobMultiHunk {
     fn encode(self) -> BinaryHunk {
         let BlobMultiHunk { hunk_type, flags, blobs, ages, checksum } = self;
-        encode_hunk(hunk_type, flags, None, blobs, Some(ages), checksum)
+        encode_hunk(hunk_type, &flags[..], None, blobs, &Some(ages), checksum)
     }
 }
 
@@ -361,20 +361,20 @@ pub fn calc_hunk_size(hunk_type: &HunkType,
 }
 
 fn encode_hunk(hunk_type: HunkType,
-               flags: Vec<HunkFlag>,
+               flags: &[HunkFlag],
                brick_name: Option<String>,
                blobs: Vec<Blob>,
-               blob_ages: Option<Vec<u8>>,
+               blob_ages: &Option<Vec<u8>>,
                checksum: Option<RawDigest>)
                -> BinaryHunk {
     let (encoded_brick_name, brick_name_size) = encode_brick_name(brick_name);
     if checksum.is_none() {
-        assert!(!has_checksum(&flags))
+        assert!(!has_checksum(flags))
     }
     let (blob_index, number_of_blobs) = create_blob_index(&blobs);
     let total_blob_size = total_blob_size(&blobs);
     let HunkSize { raw_size, padding_size, overhead, .. } = calc_hunk_size(&hunk_type,
-                                                                           &flags,
+                                                                           flags,
                                                                            brick_name_size,
                                                                            number_of_blobs,
                                                                            total_blob_size);
@@ -383,7 +383,7 @@ fn encode_hunk(hunk_type: HunkType,
 
     append_hunk_header(&mut hunk,
                        &hunk_type,
-                       &flags,
+                       flags,
                        brick_name_size,
                        number_of_blobs,
                        total_blob_size);
@@ -392,7 +392,7 @@ fn encode_hunk(hunk_type: HunkType,
                        &hunk_type,
                        checksum,
                        encoded_brick_name,
-                       &blob_ages,
+                       blob_ages,
                        &blob_index,
                        padding_size);
 
@@ -951,6 +951,8 @@ fn create_vec_u8_from_slice(bin: &[u8]) -> Vec<u8> {
 
 #[cfg(test)]
 mod tests {
+    extern crate env_logger;
+
     use super::{decode_hunks, BinaryHunk, Blob, BlobWalHunk, BlobSingleHunk, BlobMultiHunk,
                 BoxedHunk, Hunk, HunkFlag, ParseError};
 
@@ -959,6 +961,8 @@ mod tests {
 
     #[test]
     fn test_encode_hunks() {
+        let _ = env_logger::init();
+
         let brick_name = "brick1";
         let blob1_src = b"Hello";
         let blob2_src = b", ";
@@ -1128,6 +1132,8 @@ mod tests {
 
     #[test]
     fn test_decode_hunks() {
+        let _ = env_logger::init();
+
         let brick_name = "brick1";
         let blob1_src = b"Hello";
         let blob2_src = b", ";

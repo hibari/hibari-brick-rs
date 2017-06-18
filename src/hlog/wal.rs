@@ -42,7 +42,7 @@ lazy_static! {
     // TODO: Configurable
     static ref WAL_PATH: PathBuf = {
         // "$HOME/hibari-brick-test-data/wal" or "/tmp/hibari-brick-test-data/wal"
-        let mut path = PathBuf::from(env::var("HOME").unwrap_or("/tmp".to_string()));
+        let mut path = PathBuf::from(env::var("HOME").unwrap_or_else(|_| "/tmp".to_string()));
         path.push("hibari-brick-test-data");
 
         super::super::utils::create_dir_if_missing(path.as_path())
@@ -69,13 +69,7 @@ pub type BrickId = usize;
 pub enum Request {
     AddBrick(Promise<BrickId>, String),
     GetBrickId(Promise<Option<BrickId>>, String),
-    PutBlob {
-        brick_id: BrickId,
-        key: Vec<u8>,
-        value: Vec<u8>,
-        hasher: Option<Blake2b>,
-        promise: Promise<io::Result<PutBlobResult>>,
-    },
+    PutBlob(Promise<io::Result<PutBlobResult>>, Box<PutBlobPayload>),
     Flush(Promise<FlushPosition>),
     GetCurrentSeqNumAndDiskPos(Promise<(SeqNum, HunkOffset)>),
     Shutdown(Promise<bool>),
@@ -89,11 +83,36 @@ pub struct BrickInfo {
     pub writeback_seqnum: SeqNum,
 }
 
+#[derive(Debug)]
+pub struct PutBlobPayload {
+    brick_id: BrickId,
+    key: Vec<u8>,
+    value: Vec<u8>,
+    hasher: Option<Blake2b>,
+}
+
 #[derive(PartialEq, Debug)]
 pub struct PutBlobResult {
     pub brick_name: String,
     pub storage_position: WalPosition,
 }
+
+impl Request {
+    fn new_put_blob(prom: Promise<io::Result<PutBlobResult>>,
+                    brick_id: BrickId,
+                    key: Vec<u8>,
+                    value: Vec<u8>,
+                    hasher: Option<Blake2b>) -> Request {
+        let payload = PutBlobPayload{
+            brick_id: brick_id,
+            key: key,
+            value: value,
+            hasher: hasher,
+        };
+        Request::PutBlob(prom, Box::new(payload))
+    }
+}
+
 
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub struct WalPosition {
@@ -142,7 +161,7 @@ impl WalWriter {
             //     .open(WAL_PATH).unwrap();
             let f = File::create(WAL_PATH.as_path()).unwrap();
             let writer = BufWriter::new(f);
-            handle_requests(rx, writer);
+            handle_requests(&rx, writer);
         });
 
         WalWriter { queue: Mutex::new(tx) }
@@ -167,13 +186,7 @@ impl WalWriter {
         hasher.update(&value[..]);
 
         let (future, prom) = future_promise();
-        let req = Request::PutBlob {
-            brick_id: brick_id,
-            key: key,
-            value: value,
-            hasher: Some(hasher),
-            promise: prom,
-        };
+        let req = Request::new_put_blob(prom, brick_id, key, value, Some(hasher));
         send(req).unwrap();
         future
     }
@@ -233,7 +246,7 @@ impl WalWriter {
     }
 }
 
-// Drop will never be called because it is the WalWriter is bound to static?
+// Drop will never be called because the WalWriter is bound to static :(
 impl Drop for WalWriter {
     fn drop(&mut self) {
         WalWriter::shutdown();
@@ -244,7 +257,7 @@ fn send(req: Request) -> Result<(), SendError<Request>> {
     LOCAL_Q.with(|queue| queue.send(req))
 }
 
-fn handle_requests(rx: Receiver<Request>, mut writer: BufWriter<File>) {
+fn handle_requests(rx: &Receiver<Request>, mut writer: BufWriter<File>) {
 
     // State
     // let mut seq_num: SeqNum = 0u32;
@@ -265,11 +278,12 @@ fn handle_requests(rx: Receiver<Request>, mut writer: BufWriter<File>) {
                 let maybe_id = brick_ids.get(&brick_name).map(|id| id.to_owned());
                 promise.set(maybe_id);
             }
-            Request::PutBlob { brick_id, key, value, hasher, promise } => {
+            Request::PutBlob(promise, req) => {
+                let req = *req;
                 // TODO: Bound check
-                let mut brick_info = &mut brick_info_v[brick_id];
+                let mut brick_info = &mut brick_info_v[req.brick_id];
                 let brick_name = brick_info.brick_name.to_string();
-                let result = do_put_blob(&mut writer, &mut pos, &mut brick_info, key, value, hasher)
+                let result = do_put_blob(&mut writer, &mut pos, &mut brick_info, req.key, req.value, req.hasher)
                     .map(|wal_position| PutBlobResult {
                         brick_name: brick_name,
                         storage_position: wal_position,

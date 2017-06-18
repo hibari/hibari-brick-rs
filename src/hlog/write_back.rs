@@ -63,7 +63,7 @@ impl WriteBack {
         let (tx, rx) = channel();
 
         // TODO: Give a name to the threads. (Hint: Use thread builder)
-        thread::spawn(move || handle_requests(rx));
+        thread::spawn(move || handle_requests(&rx));
         WriteBack { queue: Mutex::new(tx) }
     }
 
@@ -78,7 +78,7 @@ impl WriteBack {
     }
 }
 
-// Drop will never be called because it is the WriteBack is bound to static? 
+// Drop will never be called because the WriteBack is bound to static :(
 impl Drop for WriteBack {
     fn drop(&mut self) {
         WriteBack::shutdown();
@@ -89,7 +89,7 @@ fn send(req: Request) -> Result<(), SendError<Request>> {
     LOCAL_Q.with(|queue| queue.send(req))
 }
 
-fn handle_requests(rx: Receiver<Request>) {
+fn handle_requests(rx: &Receiver<Request>) {
     // State
     // let mut last_seq_num: SeqNum = 0u32;
     let mut last_pos: HunkOffset = 0u64;
@@ -123,19 +123,15 @@ fn start_write_back_scheduler(interval: chrono::Duration) -> (timer::Timer, time
 }
 
 fn write_back_wals(last_pos: HunkOffset, block_size: u64) -> io::Result<HunkOffset> {
-    debug!("WriteBack started"); // TODO: Use env logger
+    debug!("Writeback started.");
     IS_WRITE_BACK_RUNNING.store(true, Ordering::Relaxed);
 
     // let seq_nums = WalWriter:get_all_seq_nums();
     let (cur_seq_num, cur_pos) = WalWriter::get_current_seq_num_and_disk_pos();
     let new_pos = write_back_wal(cur_seq_num, last_pos, cur_pos, block_size)?;
 
-    // let secs = rand::thread_rng().gen_range(1, 4);
-    // let dur = ::std::time::Duration::from_secs(secs);
-    // thread::sleep(dur);
-
     IS_WRITE_BACK_RUNNING.store(false, Ordering::Relaxed);
-    // debug!("WriteBack finished. {} secs", secs)
+    debug!("Writeback finished.");
 
     Ok(new_pos)
 }
@@ -156,14 +152,14 @@ fn write_back_wal(seq_num: SeqNum,
         let actual_size = f.read(&mut buf[read_offset..])? as u64;
         let bytes_to_parse = ::std::cmp::min(block_size, end_pos - cur_pos);
         let bytes_to_read = bytes_to_parse - read_offset as u64;
-        debug!("Write back: read {}/{} bytes from WAL({}).", actual_size, bytes_to_read, seq_num);
+        debug!("Writeback: read {}/{} bytes from WAL({}).", actual_size, bytes_to_read, seq_num);
         cur_pos += actual_size;
 
         match write_back_block(&buf[..(bytes_to_parse as usize)]) {
             Ok(next_offset) => {
                 read_offset = next_offset;
             }
-            Err(..) => panic!("Write back: Could not parse hunks"), // TODO: Propagate the error.
+            Err(..) => panic!("Writeback: Could not parse hunks"), // TODO: Propagate the error.
         }
         let remaining_len = bytes_to_parse as usize - read_offset;
         if remaining_len == 0 {
@@ -171,7 +167,7 @@ fn write_back_wal(seq_num: SeqNum,
         } else {
             let (distination, remain) = buf.split_at_mut(remaining_len);
             let source = &remain[(read_offset - remaining_len)..read_offset];
-            distination.copy_from_slice(&source);
+            distination.copy_from_slice(source);
             read_offset = remaining_len;
         }
     }
@@ -181,8 +177,10 @@ fn write_back_wal(seq_num: SeqNum,
 
 #[allow(dead_code)]
 fn write_back_block(bin: &[u8]) -> Result<usize, (hunk::ParseError, usize)> {
+    // TODO CHECKME: For better performance, maybe we should only parse hunk headers and use memcpy
+    // for copying actual hunks?
     let (hunks, next_offset) = hunk::decode_hunks(bin, 0)?;
-    debug!("Write back: decoded {} hunks. Remaining {} bytes.",
+    debug!("Writeback: decoded {} hunks. Remaining {} bytes.",
            hunks.len(),
            bin.len() - next_offset);
     Ok(next_offset)

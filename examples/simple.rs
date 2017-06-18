@@ -37,7 +37,7 @@ fn main() {
         let mut large_value = vec![0; VALUE_SIZE];
         large_value[..value.len()].copy_from_slice(value);
 
-        brick::put(brick_id, key.to_vec(), large_value)
+        brick::put(brick_id, key, large_value)
             .expect(&format!("Failed to put a key {}", key_str));
     };
 
