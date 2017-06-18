@@ -39,17 +39,19 @@ dependencies:
 
 test:
   override:
-    - rustup run nightly cargo clean
-    - rustup run nightly cargo build --jobs $CI_NUM_JOBS --features=clippy:
+    - cargo clean
+    - cargo +nightly build --jobs $CI_NUM_JOBS --features=clippy:
         timeout: 900
-    - rustup run stable cargo clean
-    - rustup run stable cargo test --jobs $CI_NUM_JOBS --release:
-        timeout: 900
-    - rm -rf $HOME/hibari-brick-test-data
-    - rustup run stable cargo run --release --example simple
-    - rm -rf $HOME/hibari-brick-test-data
-    - rustup run beta cargo clean
-    - rustup run beta cargo test --jobs $CI_NUM_JOBS --release:
+    - cargo clean
+    - cargo +stable test --jobs $CI_NUM_JOBS --release:
         timeout: 900
     - rm -rf $HOME/hibari-brick-test-data
-    - rustup run beta cargo run --release --example simple
+    - cargo +stable build --release --example simple
+    - RUST_LOG=debug ./target/release/examples/simple
+    - rm -rf $HOME/hibari-brick-test-data
+    - cargo clean
+    - cargo +beta test --jobs $CI_NUM_JOBS --release:
+        timeout: 900
+    - rm -rf $HOME/hibari-brick-test-data
+    - cargo +beta build --release --example simple
+    - RUST_LOG=debug ./target/release/examples/simple

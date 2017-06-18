@@ -65,7 +65,7 @@ $ cargo test
 $ cargo run --release --example simple
 
 # code lint
-$ rustup run nightly cargo build --features=clippy
+$ cargo +nightly build --features=clippy
 ```
 
 
