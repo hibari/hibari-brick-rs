@@ -30,8 +30,11 @@ const VALUE_SIZE: usize = 1024;
 fn main() {
     env_logger::init().unwrap();
 
-    let brick_name = "brick1";
-    let brick_id = brick::add_brick(brick_name);
+    let brick_names = ["brick1", "brick2", "brick3", "brick4"];
+    let mut brick_ids = [0; 4];
+    for (i, brick_name) in brick_names.iter().enumerate() {
+        brick_ids[i] = brick::add_brick(brick_name);
+    }
 
     let put_op = |brick_id: brick::BrickId, key_str: &str, key: &[u8], value: &[u8]| {
         let mut large_value = vec![0; VALUE_SIZE];
@@ -49,26 +52,28 @@ fn main() {
         assert_eq!(value, &val[..value.len()]);
     };
 
-    do_ops(brick_id, NUM_THREADS, NUM_KEYS_PER_THREAD, "put", put_op);
-    do_ops(brick_id, NUM_THREADS, NUM_KEYS_PER_THREAD, "get", get_op);
+    do_ops(&brick_ids[..], NUM_THREADS, NUM_KEYS_PER_THREAD, "put", put_op);
+    do_ops(&brick_ids[..], NUM_THREADS, NUM_KEYS_PER_THREAD, "get", get_op);
 
     brick::shutdown();
 
     println!("Done!");
 }
 
-fn do_ops<F>(brick_id: brick::BrickId,
+fn do_ops<F>(brick_ids: &[brick::BrickId],
              num_threads: u32,
              num_keys_per_thread: u32,
              op_name: &str,
              op: F)
     where F: Fn(brick::BrickId, &str, &[u8], &[u8]) + Send + Sync + 'static
 {
+    let num_bricks = brick_ids.len();
     let op = Arc::new(op);
 
     let handles: Vec<_> = (0..num_threads)
         .into_iter()
         .map(|n| {
+            let brick_id = brick_ids[n as usize % num_bricks];
             let my_op = op.clone();
             let my_op_name = op_name.to_owned();
 

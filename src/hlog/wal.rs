@@ -16,8 +16,9 @@
 
 // TODO: Implement group commit.
 
-
+use chrono;
 use promising_future::{future_promise, Promise, Future};
+use timer;
 
 use std::io::prelude::*;
 
@@ -37,6 +38,9 @@ use serde::Serialize;
 
 // use hlog::blob_store;
 use hlog::hunk::{self, BinaryHunk, Blob, BlobWalHunk, Hunk, HunkSize, HunkType};
+
+// TODO: Configurable
+pub const WAL_FLUSH_INTERVAL_MILLISECS: i64 = 1000;
 
 lazy_static! {
     // TODO: Configurable
@@ -88,6 +92,7 @@ pub struct PutBlobPayload {
     brick_id: BrickId,
     key: Vec<u8>,
     value: Vec<u8>,
+    value_checksum: Vec<u8>,
     hasher: Option<Blake2b>,
 }
 
@@ -102,12 +107,14 @@ impl Request {
                     brick_id: BrickId,
                     key: Vec<u8>,
                     value: Vec<u8>,
+                    value_checksum: Vec<u8>,
                     hasher: Option<Blake2b>) -> Request {
         let payload = PutBlobPayload{
-            brick_id: brick_id,
-            key: key,
-            value: value,
-            hasher: hasher,
+            brick_id,
+            key,
+            value,
+            value_checksum,
+            hasher,
         };
         Request::PutBlob(prom, Box::new(payload))
     }
@@ -136,8 +143,8 @@ pub struct PrivateHLogPosition {
 
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub struct AllocatedPrivateHLogPosition {
-    seqnum: SeqNum,
-    hunk_pos: HunkOffset,
+    pub seqnum: SeqNum,
+    pub hunk_pos: HunkOffset,
 }
 
 #[derive(Debug)]
@@ -184,9 +191,12 @@ impl WalWriter {
 
         let mut hasher = Blake2b::new(hunk::CHECKSUM_LEN);
         hasher.update(&value[..]);
+        let digest = hasher.clone().finalize();
+        let mut value_checksum = vec![0u8; hunk::CHECKSUM_LEN];
+        value_checksum.copy_from_slice(digest.as_bytes());
 
         let (future, prom) = future_promise();
-        let req = Request::new_put_blob(prom, brick_id, key, value, Some(hasher));
+        let req = Request::new_put_blob(prom, brick_id, key, value, value_checksum, Some(hasher));
         send(req).unwrap();
         future
     }
@@ -265,6 +275,9 @@ fn handle_requests(rx: &Receiver<Request>, mut writer: BufWriter<File>) {
     let mut brick_ids: HashMap<String, BrickId> = HashMap::new();
     let mut brick_info_v: Vec<BrickInfo> = Vec::new();
 
+    let flush_interval = chrono::Duration::milliseconds(WAL_FLUSH_INTERVAL_MILLISECS);
+    let _wal_flusher = start_wal_flush_scheduler(flush_interval);
+
     // This will effectively start the WriteBack thread;
     super::write_back::WriteBack::poke();
 
@@ -283,7 +296,7 @@ fn handle_requests(rx: &Receiver<Request>, mut writer: BufWriter<File>) {
                 // TODO: Bound check
                 let mut brick_info = &mut brick_info_v[req.brick_id];
                 let brick_name = brick_info.brick_name.to_string();
-                let result = do_put_blob(&mut writer, &mut pos, &mut brick_info, req.key, req.value, req.hasher)
+                let result = do_put_blob(&mut writer, &mut pos, &mut brick_info, req)
                     .map(|wal_position| PutBlobResult {
                         brick_name: brick_name,
                         storage_position: wal_position,
@@ -330,12 +343,10 @@ fn do_add_brick(brick_name: &str,
 fn do_put_blob(writer: &mut BufWriter<File>,
                mut pos: &mut HunkOffset,
                mut brick_info: &mut BrickInfo,
-               key: Vec<u8>,
-               value: Vec<u8>,
-               hasher: Option<Blake2b>)
+               req:PutBlobPayload)
                -> io::Result<WalPosition> {
     let hunk_flags = Vec::new();
-    let val_len = value.len() as Len;
+    let val_len = req.value.len() as Len;
 
     let private_seqnum = brick_info.head_seqnum;
     let mut private_hunk_pos = &mut brick_info.head_position;
@@ -350,7 +361,7 @@ fn do_put_blob(writer: &mut BufWriter<File>,
 
     let checksum =
         // if !NoChecksum
-        if let Some(mut hasher) = hasher {
+        if let Some(mut hasher) = req.hasher {
             hasher.update(&encoded_pos[..]);
             let digest = hasher.finalize();
             let mut result = [0u8; hunk::CHECKSUM_LEN];
@@ -360,10 +371,9 @@ fn do_put_blob(writer: &mut BufWriter<File>,
             None
         };
 
-    let blobs = vec![Blob(value), Blob(key), Blob(encoded_pos)];
+    let blobs = vec![Blob(req.value), Blob(req.value_checksum), Blob(req.key), Blob(encoded_pos)];
 
     let hunk = BlobWalHunk::new_with_checksum(&brick_info.brick_name, blobs, hunk_flags.clone(), checksum);
-    // let maybe_checksum_string = hunk.md5.as_ref().map(|digest| HEXLOWER.encode(&digest[..]));
     let maybe_checksum_string = checksum.map(|digest| HEXLOWER.encode(&digest[..]));
 
     let BinaryHunk { hunk: binary_hunk, hunk_size, blob_index, .. } = hunk.encode();
@@ -372,7 +382,7 @@ fn do_put_blob(writer: &mut BufWriter<File>,
     let wal_position = WalPosition {
         wal_seqnum: 0,
         wal_hunk_pos: *pos,
-        private_seqnum: private_seqnum,
+        private_seqnum,
         private_hunk_pos: *private_hunk_pos,
         val_offset: blob_index[0],
         val_len: val_len as Len,
@@ -383,4 +393,11 @@ fn do_put_blob(writer: &mut BufWriter<File>,
     *pos += hunk_size as HunkOffset;
     *private_hunk_pos += raw_size as HunkOffset + padding_size as HunkOffset;
     Ok(wal_position)
+}
+
+fn start_wal_flush_scheduler(interval: chrono::Duration) -> (timer::Timer, timer::Guard) {
+    let timer = timer::Timer::new();
+    // holding the guard seems required, otherwise timer will never go off.
+    let guard = timer.schedule_repeating(interval, WalWriter::flush);
+    (timer, guard)
 }

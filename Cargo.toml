@@ -2,7 +2,6 @@
 name = "hibari-brick-rs"
 version = "0.1.0"
 authors = ["Tatsuya Kawano <tatsuya@hibaridb.org>"]
-build = "build.rs"
 
 [build-dependencies]
 

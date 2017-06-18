@@ -39,32 +39,46 @@ Dropbox and Mozilla (Firefox):
 
 ### Requirements
 
-- Unix-like operating system
-  * Linux
-  * FreeBSD
-- Rust tool-chain
-  * A *stable release* (1.13 or newer) is required.
-  * Optionally, a *nightly build* of Rust to run a code-lint tool called
-    "Clippy".
-  * Use [rustup.rs](https://rustup.rs/) to install the latest stable
-    release and a nightly build of Rust tool-chains.
+**Unix-like operating system**
+
+- Linux
+- FreeBSD
+
+**Rust tool-chain**
+
+- A *stable release* (1.17 or newer) is required.
+  * This is because it utilizes
+    [object literal property value shorthand](https://blog.rust-lang.org/2017/04/27/Rust-1.17.html)
+    in 1.17, as well as relying on
+    [`?` operator](https://blog.rust-lang.org/2016/11/10/Rust-1.13.html)
+    in 1.13 and
+    [`catch_unwind()`](https://blog.rust-lang.org/2016/05/26/Rust-1.9.html)
+    in 1.9.)
+- Optionally, a *nightly build* of Rust to run a code-lint tool called
+  "Clippy".
+- Use [rustup.rs](https://rustup.rs/) to install the latest stable
+  release and a nightly build of Rust tool-chains.
   * More info about rustup.rs:
     [Taking Rust everywhere with rustup](https://blog.rust-lang.org/2016/05/13/rustup.html)
-- Tools and libraries to build RocksDB
-  * On Linux (Ubuntu), `sudo apt install gcc make libgflags-dev`
-  * On FreeBSD, **TODO**
+
+**Tools and libraries to build RocksDB**
+
+- On Linux (Ubuntu), `sudo apt install gcc g++ make libgflags-dev`
+- On FreeBSD, **TODO**
 
 
 ### Building and Running
 
 ```
-# build and run unit tests
+# (assuming stable is the default toolchain of rustup)
+
+# build and run unit tests.
 $ cargo test
 
-# run a simple demo program
+# run a simple demo program.
 $ cargo run --release --example simple
 
-# code lint
+# do code lint.
 $ cargo +nightly build --features=clippy
 ```
 

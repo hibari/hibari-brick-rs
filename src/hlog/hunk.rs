@@ -144,7 +144,7 @@ const FLAG_NO_CHECKSUM: u8 = 0b_0000_0001;
 // Blake2b with digest length of 256 bits
 pub const CHECKSUM_LEN: usize = 32;
 
-type RawDigest = [u8; CHECKSUM_LEN];
+pub type RawDigest = [u8; CHECKSUM_LEN];
 
 #[derive(Debug)]
 pub enum BoxedHunk {
@@ -180,29 +180,29 @@ pub struct ParseError; // TODO
 
 #[derive(PartialEq, Debug)]
 pub struct BlobWalHunk {
-    hunk_type: HunkType,
-    brick_name: String,
-    flags: Vec<HunkFlag>,
-    blobs: Vec<Blob>,
+    pub hunk_type: HunkType,
+    pub brick_name: String,
+    pub flags: Vec<HunkFlag>,
+    pub blobs: Vec<Blob>,
     pub checksum: Option<RawDigest>,
 }
 
 #[derive(PartialEq, Debug)]
 pub struct BlobSingleHunk {
-    hunk_type: HunkType,
-    flags: Vec<HunkFlag>,
-    blob: Blob,
-    age: u8,
-    checksum: Option<RawDigest>,
+    pub hunk_type: HunkType,
+    pub flags: Vec<HunkFlag>,
+    pub blob: Blob,
+    pub age: u8,
+    pub checksum: Option<RawDigest>,
 }
 
 #[derive(PartialEq, Debug)]
 pub struct BlobMultiHunk {
-    hunk_type: HunkType,
-    flags: Vec<HunkFlag>,
-    blobs: Vec<Blob>,
-    ages: Vec<u8>,
-    checksum: Option<RawDigest>,
+    pub hunk_type: HunkType,
+    pub flags: Vec<HunkFlag>,
+    pub blobs: Vec<Blob>,
+    pub ages: Vec<u8>,
+    pub checksum: Option<RawDigest>,
 }
 
 #[derive(Debug)]
@@ -228,8 +228,8 @@ impl BlobWalHunk {
             hunk_type: HunkType::BlobWal,
             brick_name: brick_name.to_string(),
             flags: clone_flags(flags),
-            blobs: blobs,
-            checksum: checksum,
+            blobs,
+            checksum,
         }
     }
 
@@ -241,9 +241,9 @@ impl BlobWalHunk {
         BlobWalHunk {
             hunk_type: HunkType::BlobWal,
             brick_name: brick_name.to_string(),
-            flags: flags,
-            blobs: blobs,
-            checksum: checksum,
+            flags,
+            blobs,
+            checksum,
         }
     }
 }
@@ -261,9 +261,22 @@ impl BlobSingleHunk {
         BlobSingleHunk {
             hunk_type: HunkType::BlobSingle,
             flags: clone_flags(flags),
-            blob: blob,
+            blob,
             age: 0,
-            checksum: checksum,
+            checksum,
+        }
+    }
+
+    pub fn new_with_checksum(blob: Blob,
+                             flags: &[HunkFlag],
+                             checksum: Option<RawDigest>)
+                             -> Self {
+        BlobSingleHunk {
+            hunk_type: HunkType::BlobSingle,
+            flags: clone_flags(flags),
+            blob,
+            age: 0,
+            checksum,
         }
     }
 
@@ -274,10 +287,10 @@ impl BlobSingleHunk {
                                      -> Self {
         BlobSingleHunk {
             hunk_type: HunkType::BlobSingle,
-            flags: flags,
-            blob: blob,
-            age: age,
-            checksum: checksum,
+            flags,
+            blob,
+            age,
+            checksum,
         }
     }
 }
@@ -298,9 +311,9 @@ impl BlobMultiHunk {
         BlobMultiHunk {
             hunk_type: HunkType::BlobMulti,
             flags: clone_flags(flags),
-            blobs: blobs,
-            ages: ages,
-            checksum: checksum,
+            blobs,
+            ages,
+            checksum,
         }
     }
 
@@ -311,10 +324,10 @@ impl BlobMultiHunk {
                                       -> Self {
         BlobMultiHunk {
             hunk_type: HunkType::BlobMulti,
-            flags: flags,
-            blobs: blobs,
+            flags,
+            blobs,
             ages: create_vec_u8_from_slice(ages),
-            checksum: checksum,
+            checksum,
         }
     }
 }
@@ -352,12 +365,7 @@ pub fn calc_hunk_size(hunk_type: &HunkType,
     let rem: u8 = (raw_size % HUNK_ALIGNMENT as u32) as u8;
     let padding_size: u8 = if rem == 0 { 0 } else { HUNK_ALIGNMENT - rem };
     let overhead = (raw_size + padding_size as u32 - total_blob_size) as u8;
-    HunkSize {
-        raw_size: raw_size,
-        footer_size: footer_size,
-        padding_size: padding_size,
-        overhead: overhead,
-    }
+    HunkSize { raw_size, footer_size, padding_size, overhead }
 }
 
 fn encode_hunk(hunk_type: HunkType,
@@ -396,12 +404,7 @@ fn encode_hunk(hunk_type: HunkType,
                        &blob_index,
                        padding_size);
 
-    BinaryHunk {
-        hunk: hunk,
-        hunk_size: hunk_size,
-        overhead: overhead,
-        blob_index: blob_index,
-    }
+    BinaryHunk {hunk, hunk_size, overhead, blob_index }
 }
 
 fn create_blob_index(blobs: &[Blob]) -> (Vec<u32>, u16) {

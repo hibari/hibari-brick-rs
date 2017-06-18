@@ -16,20 +16,22 @@
 
 use chrono;
 use promising_future::{future_promise, Promise};
-// use rand::{self, Rng};
+use rmps::Deserializer;
+use serde::Deserialize;
 use timer;
 
 use std::io::prelude::*;
 
 use std::io::{self, SeekFrom};
 
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::sync::mpsc::{channel, Sender, SendError, Receiver};
 use std::thread;
 
-use super::hunk;
-use super::wal::{HunkOffset, SeqNum, WalWriter};
+use super::hunk::{self, BinaryHunk, BlobSingleHunk, BlobWalHunk, BoxedHunk, CHECKSUM_LEN, Hunk};
+use super::wal::{AllocatedPrivateHLogPosition, HunkOffset, SeqNum, WalWriter};
 
 // TODO: Configurable
 pub const PRIVATE_BLOB_PATH: &'static str = "/tmp/hibari-brick-test-data-blob-";
@@ -52,6 +54,13 @@ pub enum Request {
     // FullWriteBack(Promise<bool>), // No need for full write back because
                                      // keys/metadata are not in the WAL.
     Shutdown(Promise<bool>),
+}
+
+struct WriteBackRecord {
+    hunk: Vec<u8>,
+    hunk_size: u32,
+    key: Vec<u8>,
+    pos: AllocatedPrivateHLogPosition,
 }
 
 pub struct WriteBack {
@@ -149,18 +158,18 @@ fn write_back_wal(seq_num: SeqNum,
 
     while cur_pos < end_pos {
         let actual_size = f.read(&mut buf[read_offset..])? as u64;
-        let bytes_to_parse = ::std::cmp::min(block_size, end_pos - cur_pos);
-        let bytes_to_read = bytes_to_parse - read_offset as u64;
-        debug!("Writeback: read {}/{} bytes from WAL({}).", actual_size, bytes_to_read, seq_num);
-        cur_pos += actual_size;
+        debug!("Writeback: read {} bytes from WAL({}).", actual_size, seq_num);
 
-        match write_back_block(&buf[..(bytes_to_parse as usize)]) {
+        cur_pos += actual_size;
+        let bytes_to_parse = ::std::cmp::min(block_size as usize, read_offset + actual_size as usize);
+
+        match write_back_block(&buf[..bytes_to_parse as usize]) {
             Ok(next_offset) => {
                 read_offset = next_offset;
             }
             Err(..) => panic!("Writeback: Could not parse hunks"), // TODO: Propagate the error.
         }
-        let remaining_len = bytes_to_parse as usize - read_offset;
+        let remaining_len = bytes_to_parse - read_offset;
         if remaining_len == 0 {
             read_offset = 0;
         } else {
@@ -177,8 +186,45 @@ fn write_back_block(bin: &[u8]) -> Result<usize, (hunk::ParseError, usize)> {
     // TODO CHECKME: For better performance, maybe we should only parse hunk headers and use memcpy
     // for copying actual hunks?
     let (hunks, next_offset) = hunk::decode_hunks(bin, 0)?;
-    debug!("Writeback: decoded {} hunks. Remaining {} bytes.",
+    debug!("Writeback: decoded {} hunks. Remaining {} byte(s).",
            hunks.len(),
            bin.len() - next_offset);
+
+    let mut hunks_by_brick = HashMap::new();
+
+    // TODO: Use Rayon's parallel map to distribute checksum calculations across processor cores.
+    for boxed_hunk in hunks {
+        if let BoxedHunk::BlobWal(blob_wal_hunk) = boxed_hunk {
+            let BlobWalHunk { brick_name, flags, mut blobs, /* checksum, */ .. } = blob_wal_hunk;
+
+            // TODO: Verify the checksum.
+
+            assert_eq!(4, blobs.len());
+            let encoded_pos = blobs.pop().expect("Cannot pop encoded_pos").0;
+            let key = blobs.pop().expect("Cannot pop key").0;
+            let value_checksum_v = blobs.pop().expect("Cannot pop value_checksum").0;
+            let blob = blobs.pop().expect("Cannot pop blob");
+
+            let mut decoder = Deserializer::new(&encoded_pos[..]);
+            let pos: AllocatedPrivateHLogPosition = Deserialize::deserialize(&mut decoder).ok().unwrap();
+
+            let mut value_checksum = [0u8; CHECKSUM_LEN];
+            value_checksum.copy_from_slice(&value_checksum_v);
+
+            let blob_single_hunk = BlobSingleHunk::new_with_checksum(blob, &flags, Some(value_checksum));
+            let BinaryHunk { hunk: binary_hunk, hunk_size, .. } = blob_single_hunk.encode();
+
+            let rec =  WriteBackRecord { hunk: binary_hunk, hunk_size, key, pos };
+            let hunks = hunks_by_brick.entry(brick_name).or_insert_with(Vec::new);
+            hunks.push(rec);
+        } else {
+            unreachable!();
+        }
+    }
+
+    for (brick_name, hunks) in hunks_by_brick {
+        debug!("Writeback: {}: {} hunks.", brick_name, hunks.len());
+    }
+
     Ok(next_offset)
 }
