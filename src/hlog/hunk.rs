@@ -546,7 +546,6 @@ fn total_blob_size(blobs: &[Blob]) -> u32 {
     blobs.iter().fold(0, |acc, &Blob(ref blob)| acc + blob.len()) as u32
 }
 
-// ---------------------------------------------------------------------------
 pub fn decode_hunks(bin: &[u8], start_offset: usize) -> Result<(Vec<BoxedHunk>, usize), (ParseError, usize)> {
     let mut hunks = Vec::new();
     let mut offset = start_offset;
@@ -562,26 +561,6 @@ pub fn decode_hunks(bin: &[u8], start_offset: usize) -> Result<(Vec<BoxedHunk>, 
     }
     Ok((hunks, offset))
 }
-
-// -spec parse_hunks(binary()) -> {ok, [hunk()], Remainder::binary()}
-//                                   | {error, Reason::term(), [hunk()]}.
-// parse_hunks(Hunks) when is_binary(Hunks) ->
-//     parse_hunks1(Hunks, []).
-//
-// -spec parse_hunks1(binary(), [hunk()])
-//                   -> {ok, [hunk()], Remainder::binary()}
-//                          | {error, Reason::term(), [hunk()]}.
-// parse_hunks1(<<>>, Acc) ->
-//     {ok, lists:reverse(Acc), <<>>};
-// parse_hunks1(Hunks, Acc) ->
-//     case parse_hunk_iodata(Hunks) of
-//         {ok, Hunk, Remainder} ->
-//             parse_hunks1(Remainder, [Hunk | Acc]);
-//         {error, {incomplete_input, _Size}} ->
-//             {ok, lists:reverse(Acc), Hunks};
-//         {error, Reason} ->
-//             {error, Reason, lists:reverse(Acc)}
-//     end.
 
 fn decode_hunk(bin: &[u8], offset: usize) -> Result<(BoxedHunk, usize), (ParseError, usize)> {
     let header_size = HUNK_HEADER_SIZE as usize;
@@ -663,72 +642,6 @@ fn decode_header(header: &[u8]) -> Result<(HunkType, Vec<HunkFlag>, u16, u16, u3
     Ok((decoded_type, decoded_flags, brick_name_size, number_of_blobs, total_blob_size))
 }
 
-// -spec parse_hunk_iodata(iodata()) -> {ok, hunk(), Remainder::binary()} | {error, term()}.
-// parse_hunk_iodata(Hunk) when is_list(Hunk) ->
-//     parse_hunk_iodata(list_to_binary(Hunk));
-// parse_hunk_iodata(<<?HUNK_HEADER_MAGIC, Type:1/binary, Flags:1/unit:8, BrickNameSize:2/unit:8,
-//                     NumberOfBlobs:2/unit:8, TotalBlobSize:4/unit:8, Rest/binary>>) ->
-//     RestSize     = byte_size(Rest),
-//     DecodedType  = decode_type(Type),
-//     DecodedFlags = decode_flags(Flags),
-//     {_RawSize, FooterSize, PaddingSize, _Overhead} =
-//         calc_hunk_size(DecodedType, DecodedFlags, BrickNameSize, NumberOfBlobs, TotalBlobSize),
-//     RemainderPos  = TotalBlobSize + FooterSize + PaddingSize,
-//     RemainderSize = RestSize - RemainderPos,
-//
-//     if
-//         RemainderSize < 0 ->
-//             {error, {incomplete_input, ?HUNK_HEADER_SIZE + RestSize}};
-//         true ->
-//             BodyBin   = binary:part(Rest, 0, TotalBlobSize),
-//             FooterBin = binary:part(Rest, TotalBlobSize, FooterSize),
-//             Remainder = binary:part(Rest, RemainderPos, RemainderSize),
-//
-//             case parse_hunk_footer(DecodedType, has_md5(DecodedFlags),
-//                                    BrickNameSize, NumberOfBlobs, FooterBin) of
-//                 {error, _}=Err ->
-//                     Err;
-//                 {ok, Md5, BrickName, BlobIndexBin, BlobAgesBin} ->
-//                     if
-//                         DecodedType =:= blob_single ->
-//                             {ok, #hunk{type=DecodedType, flags=DecodedFlags,
-//                                        blobs=[BodyBin], blob_ages=[BlobAgesBin],
-//                                        md5=Md5},
-//                              Remainder};
-//                         true ->
-//                             Blobs = parse_hunk_body(BodyBin, BlobIndexBin),
-//                             BlobAges = parse_blob_ages(BlobAgesBin),
-//                             {ok, #hunk{type=DecodedType, flags=DecodedFlags,
-//                                        brick_name=BrickName,
-//                                        blobs=Blobs, blob_ages=BlobAges,
-//                                        md5=Md5},
-//                              Remainder}
-//                     end
-//             end
-//     end;
-// parse_hunk_iodata(<<Bin:?HUNK_HEADER_SIZE, _Remainder/binary>>)
-//   when byte_size(Bin) >= ?HUNK_HEADER_SIZE ->
-//     {error, {invalid_format, hunk_header, Bin}};
-// parse_hunk_iodata(Bin) ->
-//     {error, {incomplete_input, byte_size(Bin)}}.
-
-
-// -spec read_blob_directly(file:fd(), non_neg_integer(), non_neg_integer(), non_neg_integer()) ->
-//                                 {ok, binary()} | eof | {error, term()}.
-// read_blob_directly(FH, HunkOffset, BlobOffset, BlobSize) ->
-//     %% file:pread(FH, HunkOffset + BlobOffset, BlobSize).
-//     %% @TODO: DEBUG Removeme
-//     case file:pread(FH, HunkOffset, 2) of
-//         {ok, <<?HUNK_HEADER_MAGIC>>} ->
-//             file:pread(FH, HunkOffset + BlobOffset, BlobSize);
-//         {ok, Other} ->
-//             error({wrong_position, HunkOffset, BlobOffset, BlobSize, Other});
-//         eof ->
-//             eof;
-//         {error, _}=Err ->
-//             Err
-//     end.
-
 fn parse_hunk_body(blob_slice: &[u8],
                    blob_index_bin: &[u8],
                    number_of_blobs: u16)
@@ -759,32 +672,6 @@ fn parse_hunk_body(blob_slice: &[u8],
 
     Ok(blobs)
 }
-
-// -spec parse_hunk_body(binary(), binary()) -> [binary()].
-// parse_hunk_body(Blobs, <<Offset:4/unit:8, Rest/binary>>) ->
-//     parse_hunk_body1(Blobs, Offset - ?HUNK_HEADER_SIZE, Rest, []).
-//
-// -spec parse_hunk_body1(binary(), non_neg_integer(), binary(), [binary()]) -> [binary()].
-// parse_hunk_body1(Blobs, RelatiVeoffset1, <<>>, Acc) ->
-//     Blob = binary:part(Blobs, RelativeOffset1, byte_size(Blobs) - RelativeOffset1),
-//     lists:reverse([Blob | Acc]);
-// parse_hunk_body1(Blobs, RelativeOffset1, <<Offset2:4/unit:8, Rest/binary>>, Acc) ->
-//     RelativeOffset2 = Offset2 - ?HUNK_HEADER_SIZE,
-//     Blob = binary:part(Blobs, RelativeOffset1, RelativeOffset2 - RelativeOffset1),
-//     parse_hunk_body1(Blobs, RelativeOffset2, Rest, [Blob | Acc]).
-
-// -spec parse_blob_ages(undefined | binary()) -> [non_neg_integer()].
-// parse_blob_ages(undefined) ->
-//     [];
-// parse_blob_ages(BlobAgesBin) ->
-//     parse_blob_ages1(BlobAgesBin, []).
-//
-// -spec parse_blob_ages1(binary(), [non_neg_integer()]) -> [non_neg_integer()].
-// parse_blob_ages1(<<>>, Acc) ->
-//     lists:reverse(Acc);
-// parse_blob_ages1(<<BlobAge:1/unit:8, Rest/binary>>, Acc) ->
-//     parse_blob_ages1(Rest, [BlobAge | Acc]).
-//
 
 struct ParseHunkFooterResult {
     checksum: Option<RawDigest>,
@@ -846,56 +733,6 @@ fn parse_hunk_footer(hunk_type: &HunkType,
     })
 }
 
-// -spec parse_hunk_footer(hunk_type(), boolean(), non_neg_integer(), non_neg_integer(), binary())
-//                        -> {ok,
-//                            Md5::binary() | undefined,
-//                            BrickName::atom() | undefined,
-//                            BlobIndexBinary::binary(),
-//                            BlobAges::binary() | non_neg_integer() | undefined }
-//                               | {error, term()}.
-// %% type: metadata or blob_wal
-// parse_hunk_footer(Type, HasMd5, BrickNameSize, NumberOfBlobs, <<?HUNK_FOOTER_MAGIC, Bin/binary>>)
-//   when Type =:= metadata; Type =:= blob_wal ->
-//     BlobIndexSize = 4 * NumberOfBlobs,
-//     case {HasMd5, Bin} of
-//         {true, <<Md5:16/binary, BrickName:BrickNameSize/binary, BlobIndexBin:BlobIndexSize/binary>>} ->
-//             {ok, Md5, decode_brick_name(BrickName), BlobIndexBin, undefined};
-//         {false, <<BrickName:BrickNameSize/binary, BlobIndexBin:BlobIndexSize/binary>>} ->
-//             {ok, undefined, decode_brick_name(BrickName), BlobIndexBin, undefined};
-//         _ ->
-//             {error, {invalid_format, hunk_footer, Bin}}
-//     end;
-// %% type: blob_multi
-// parse_hunk_footer(blob_multi, HasMd5, 0, NumberOfBlobs, <<?HUNK_FOOTER_MAGIC, Bin/binary>>) ->
-//     BlobIndexSize = 4 * NumberOfBlobs,
-//     BlobAgesSize  = NumberOfBlobs,
-//     case {HasMd5, Bin} of
-//         {true, <<Md5:16/binary, BlobIndexBin:BlobIndexSize/binary, BlobAgesBin:BlobAgesSize/binary>>} ->
-//             {ok, Md5, undefined, BlobIndexBin, BlobAgesBin};
-//         {false, <<BlobIndexBin:BlobIndexSize/binary, BlobAgesBin:BlobAgesSize/binary>>} ->
-//             {ok, undefined, undefined, BlobIndexBin, BlobAgesBin};
-//         _ ->
-//             {error, {invalid_format, hunk_footer, Bin}}
-//     end;
-// %% type: blob_single
-// parse_hunk_footer(blob_single, true, 0, 1,
-//                   <<?HUNK_FOOTER_MAGIC, Md5:16/binary, BlobAge:1/unit:8>>) ->
-//     {ok, Md5, undefined, <<>>, BlobAge};
-// parse_hunk_footer(blob_single, false, 0, 1,
-//                   <<?HUNK_FOOTER_MAGIC, BlobAge:1/unit:8>>) ->
-//     {ok, undefined, undefined, <<>>, BlobAge}.
-
-
-// -spec decode_type(binary()) -> hunk_type().
-// decode_type(?TYPE_METADATA) ->
-//     metadata;
-// decode_type(?TYPE_BLOB_WAL) ->
-//     blob_wal;
-// decode_type(?TYPE_BLOB_SINGLE) ->
-//     blob_single;
-// decode_type(?TYPE_BLOB_MULTI) ->
-//     blob_multi.
-
 fn decode_type(hunk_type: u8) -> Result<HunkType, ParseError> {
     match hunk_type {
         TYPE_METADATA => Ok(HunkType::Metadata),
@@ -906,17 +743,6 @@ fn decode_type(hunk_type: u8) -> Result<HunkType, ParseError> {
     }
 }
 
-// -spec decode_flags(non_neg_integer()) -> [hunk_flag()].
-// decode_flags(Flags) when is_integer(Flags) ->
-//     lists:foldl(fun(no_md5, Acc) ->
-//                         if
-//                             Flags band ?FLAG_NO_MD5 =/= 0 ->
-//                                 [no_md5 | Acc];
-//                             true ->
-//                                 Acc
-//                         end
-//                 end, [], [no_md5]).
-
 fn decode_flags(flags: u8) -> Result<Vec<HunkFlag>, ParseError> {
     let mut decoded_flags = Vec::new();
     if flags & FLAG_NO_CHECKSUM != 0 {
@@ -924,12 +750,6 @@ fn decode_flags(flags: u8) -> Result<Vec<HunkFlag>, ParseError> {
     }
     Ok(decoded_flags)
 }
-
-// -spec decode_brick_name(binary()) -> undefined | atom().
-// decode_brick_name(<<>>) ->
-//     undefined;
-// decode_brick_name(EncodedBrickName) ->
-//     list_to_atom(binary_to_list(EncodedBrickName)).
 
 fn decode_brick_name(bin: &[u8]) -> Result<String, ParseError> {
     if bin.is_empty() {
@@ -953,8 +773,8 @@ fn create_vec_u8_from_slice(bin: &[u8]) -> Vec<u8> {
 mod tests {
     extern crate env_logger;
 
-    use super::{decode_hunks, BinaryHunk, Blob, BlobWalHunk, BlobSingleHunk, BlobMultiHunk,
-                BoxedHunk, Hunk, HunkFlag, ParseError};
+    use super::{calc_hunk_size, decode_hunks, BinaryHunk, Blob, BlobWalHunk, BlobSingleHunk,
+                BlobMultiHunk, BoxedHunk, Hunk, HunkFlag, HunkSize, HunkType, ParseError};
 
     // Blake2s checksum can be generated by:
     //   python3 -c "import hashlib; print(hashlib.blake2b(b'Hello, world!', digest_size=32).hexdigest())"
@@ -1239,7 +1059,8 @@ mod tests {
             assert_eq!(80, binary.len());
 
             match decode_hunks(&binary, 0) {
-                Ok((boxed_hunks, _offset)) =>
+                Ok((boxed_hunks, _offset)) => {
+                    assert_eq!(1, boxed_hunks.len());
                     if let &BoxedHunk::BlobWal(ref hunk) = &boxed_hunks[0] {
                         let blobs =
                             vec![make_blob(blob1_src), make_blob(blob2_src), make_blob(blob3_src)];
@@ -1247,9 +1068,116 @@ mod tests {
                         assert_eq!(&expected, hunk);
                     } else {
                         panic!("boxed_hunk[0] is not a BlobWalHunk");
-                    },
+                    }
+                }
                 Err((ParseError, _offset)) => unreachable!(),
             }
+        }
+    }
+
+    #[test]
+    fn test_encode_and_decode_many_wal_hunks() {
+        let _ = env_logger::init();
+
+        let num_hunks = 1000;
+        let brick_name = "brick1";
+        let hunk_flags: [HunkFlag; 0] = [];
+
+        fn make_blobs(i: usize) -> Vec<Blob> {
+            let blob1 = format!("blob1_{:010}", i);
+            let blob2 = format!("blob2_{:010}", i);
+            let blob3 = format!("blob3_{:010}", i);
+            let blob4 = format!("blob4_{:010}", i);
+            vec![make_blob(blob1.as_bytes()),
+                 make_blob(blob2.as_bytes()),
+                 make_blob(blob3.as_bytes()),
+                 make_blob(blob4.as_bytes())]
+        }
+
+        let expected_bin_size = {
+            let HunkSize{raw_size, padding_size, ..} =
+                calc_hunk_size(&HunkType::BlobWal,
+                               &hunk_flags,
+                               brick_name.as_bytes().len() as u16,
+                               4,
+                               16 * 4);
+            (raw_size as usize + padding_size as usize) * num_hunks
+        };
+
+        assert!(expected_bin_size % 8 == 0);
+
+
+        let mut hunks = Vec::with_capacity(expected_bin_size);
+
+        // Encode everything.
+        {
+            let mut bin_size: usize = 0;
+
+            for i in 0..num_hunks {
+                let blobs = make_blobs(i);
+                let hunk = BlobWalHunk::new(brick_name, blobs, &hunk_flags);
+                let BinaryHunk {
+                    hunk: mut binary_hunk, hunk_size, .. } = hunk.encode();
+                hunks.append(&mut binary_hunk);
+                bin_size += hunk_size as usize;
+            }
+
+            assert_eq!(bin_size, hunks.len());
+            assert_eq!(expected_bin_size, hunks.len());
+        }
+
+        // Decode everything at once.
+        match decode_hunks(&hunks[..], 0) {
+            Err(_) => unreachable!(),
+            Ok((boxed_hunks, offset)) => {
+                assert_eq!(num_hunks, boxed_hunks.len());
+                assert_eq!(expected_bin_size, offset);
+
+                for (i, boxed_hunk) in boxed_hunks.iter().enumerate() {
+                    if let &BoxedHunk::BlobWal(ref hunk) = boxed_hunk {
+                        let expected_blobs = make_blobs(i);
+                        assert_eq!(expected_blobs, hunk.blobs);
+                    } else {
+                        unreachable!();
+                    }
+                }
+            }
+        }
+
+        // Decode using a fixed-size buffer.
+        {
+            // buffer is 5 bytes longer than the size to hold 10 hunks.
+            let buffer_len = expected_bin_size / num_hunks * 10 + 5;
+            let mut buffer = vec![0u8; buffer_len];
+            let mut start_offset = 0;
+            let mut hunk_count = 0;
+            let mut hunk_number = 0;
+
+            while start_offset < expected_bin_size {
+                let end_offset = ::std::cmp::min(start_offset + buffer_len, expected_bin_size);
+                let copy_size = end_offset - start_offset;
+                (&mut buffer[..copy_size]).copy_from_slice(&hunks[start_offset..end_offset]);
+
+                match decode_hunks(&buffer[..], 0) {
+                    Err(_) => unreachable!(),
+                    Ok((hunks, next_offset)) => {
+                        hunk_count += hunks.len();
+                        start_offset += next_offset;
+
+                        for boxed_hunk in &hunks {
+                            if let &BoxedHunk::BlobWal(ref hunk) = boxed_hunk {
+                                let expected_blobs = make_blobs(hunk_number);
+                                assert_eq!(expected_blobs, hunk.blobs);
+                                hunk_number += 1;
+                            } else {
+                                unreachable!();
+                            }
+                        }
+                    }
+                }
+            }
+
+            assert_eq!(num_hunks, hunk_count);
         }
     }
 

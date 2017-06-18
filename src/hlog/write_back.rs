@@ -141,13 +141,12 @@ fn write_back_wal(seq_num: SeqNum,
                   end_pos: HunkOffset, 
                   block_size: u64) -> io::Result<HunkOffset> {
     let mut f = WalWriter::open_wal_for_read(seq_num)?;
-    let /* mut */ cur_pos = f.seek(SeekFrom::Start(start_pos))?;
+    let mut cur_pos = f.seek(SeekFrom::Start(start_pos))?;
     assert_eq!(cur_pos, start_pos);
 
-    let /* mut */ _buf = vec![0u8; block_size as usize];
-    let /* mut */ _read_offset = 0;
+    let mut buf = vec![0u8; block_size as usize];
+    let mut read_offset = 0;
 
-    /*
     while cur_pos < end_pos {
         let actual_size = f.read(&mut buf[read_offset..])? as u64;
         let bytes_to_parse = ::std::cmp::min(block_size, end_pos - cur_pos);
@@ -171,11 +170,9 @@ fn write_back_wal(seq_num: SeqNum,
             read_offset = remaining_len;
         }
     }
-    */
     Ok(end_pos)
 }
 
-#[allow(dead_code)]
 fn write_back_block(bin: &[u8]) -> Result<usize, (hunk::ParseError, usize)> {
     // TODO CHECKME: For better performance, maybe we should only parse hunk headers and use memcpy
     // for copying actual hunks?
