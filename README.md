@@ -51,7 +51,7 @@ Dropbox and Mozilla (Firefox):
   * More info about rustup.rs:
     [Taking Rust everywhere with rustup](https://blog.rust-lang.org/2016/05/13/rustup.html)
 - Tools and libraries to build RocksDB
-  * On Linux (Ubuntu), `sudo apt install gcc make libgflags-dev`
+  * On Linux (Ubuntu), `sudo apt install clang-5.0 libclang-5.0-dev libgflags-dev llvm-5.0-dev gcc make`
   * On FreeBSD, **TODO**
 
 
