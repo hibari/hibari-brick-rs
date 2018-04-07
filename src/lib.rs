@@ -14,8 +14,8 @@
 //  limitations under the License.
 // ----------------------------------------------------------------------
 
-#![cfg_attr(feature="clippy", feature(plugin))]
-#![cfg_attr(feature="clippy", plugin(clippy))]
+#![cfg_attr(feature = "clippy", feature(plugin))]
+#![cfg_attr(feature = "clippy", plugin(clippy))]
 
 #[macro_use]
 extern crate lazy_static;
@@ -39,7 +39,7 @@ extern crate serde;
 extern crate timer;
 
 use rmps::{Deserializer, Serializer};
-use rocksdb::{DB, Options};
+use rocksdb::{Options, DB};
 use serde::{Deserialize, Serialize};
 
 use std::{env, io};
@@ -97,11 +97,15 @@ pub fn get_brick_id(brick_name: &str) -> Option<BrickId> {
 pub fn put(brick_id: BrickId, key: &[u8], value: Vec<u8>) -> io::Result<()> {
     // write blob to WAL
     let future = WalWriter::put_value(brick_id, key.to_vec(), value);
-    let PutBlobResult { storage_position, .. } = future.value().unwrap().unwrap();
+    let PutBlobResult {
+        storage_position, ..
+    } = future.value().unwrap().unwrap();
 
     // write metadata to RocksDB
     let mut buf: Vec<u8> = Vec::new();
-    storage_position.serialize(&mut Serializer::new(&mut buf)).unwrap();
+    storage_position
+        .serialize(&mut Serializer::new(&mut buf))
+        .unwrap();
     MAIN_DB.put(key, &buf[..]).unwrap();
 
     Ok(())

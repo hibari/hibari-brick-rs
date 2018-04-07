@@ -20,8 +20,8 @@ extern crate md_5 as md5;
 extern crate sha2;
 extern crate sha3;
 
-extern crate rand;
 extern crate data_encoding;
+extern crate rand;
 
 use std::time::Instant;
 
@@ -51,7 +51,8 @@ fn main() {
     let dur_sha3_512 = hash::<Sha3_512>(&input[..], "SHA-3-512     ");
     let dur_blake2b =  hash::<Blake2b>(&input[..],  "Blake2b       ");
 
-    println!(r"
+    println!(
+        r"
 Speed ups:
   MD5 (asm):     {:.2}x
   SHA-256 (asm): 1.00x
@@ -61,17 +62,21 @@ Speed ups:
   SHA-512 (asm): {:.2}x
   SHA-3-512:     {:.2}x
   Blake2b (512): {:.2}x",
-             dur_sha256 / dur_md5,
-             dur_sha256 / dur_sha3_256,
-             dur_sha256 / dur_blake2s,
-             dur_sha256 / dur_blake2b_rfc,
-             dur_sha256 / dur_sha512,
-             dur_sha256 / dur_sha3_512,
-             dur_sha256 / dur_blake2b);
+        dur_sha256 / dur_md5,
+        dur_sha256 / dur_sha3_256,
+        dur_sha256 / dur_blake2s,
+        dur_sha256 / dur_blake2b_rfc,
+        dur_sha256 / dur_sha512,
+        dur_sha256 / dur_sha3_512,
+        dur_sha256 / dur_blake2b
+    );
 }
 
 fn generate_input(len: usize) -> Vec<u8> {
-    println!("Generating a random input data (length: {:.2} GB)", len as f64 / GB as f64);
+    println!(
+        "Generating a random input data (length: {:.2} GB)",
+        len as f64 / GB as f64
+    );
 
     let start = Instant::now();
 
@@ -80,9 +85,11 @@ fn generate_input(len: usize) -> Vec<u8> {
 
     let dur = Instant::now() - start;
     let nano_secs = dur.subsec_nanos() as f64 + dur.as_secs() as f64 * 1e9_f64;
-    println!("Generated the random input data in {:.2} seconds ({:.0} nano-seconds)\n",
-             nano_secs / 1e9_f64,
-             nano_secs);
+    println!(
+        "Generated the random input data in {:.2} seconds ({:.0} nano-seconds)\n",
+        nano_secs / 1e9_f64,
+        nano_secs
+    );
     input
 }
 
@@ -95,11 +102,13 @@ fn hash<D: Digest + Default>(input: &[u8], label: &str) -> f64 {
 
     let dur = Instant::now() - start;
     let nano_secs = dur.subsec_nanos() as f64 + dur.as_secs() as f64 * 1e9_f64;
-    println!("{} - {:.2} seconds ({:.0} nano-seconds), digest: {:?}", 
-             label,
-             nano_secs / 1e9_f64, 
-             nano_secs, 
-             HEXLOWER.encode(&digest[..]));
+    println!(
+        "{} - {:.2} seconds ({:.0} nano-seconds), digest: {:?}",
+        label,
+        nano_secs / 1e9_f64,
+        nano_secs,
+        HEXLOWER.encode(&digest[..])
+    );
     nano_secs
 }
 
@@ -110,9 +119,11 @@ fn hash_blake2b_rfc(input: &[u8]) -> f64 {
 
     let dur = Instant::now() - start;
     let nano_secs = dur.subsec_nanos() as f64 + dur.as_secs() as f64 * 1e9_f64;
-    println!("Blake2b (256): - {:.2} seconds ({:.0} nano-seconds), digest: {:?}", 
-             nano_secs / 1e9_f64, 
-             nano_secs, 
-             HEXLOWER.encode(digest.as_bytes()));
+    println!(
+        "Blake2b (256): - {:.2} seconds ({:.0} nano-seconds), digest: {:?}",
+        nano_secs / 1e9_f64,
+        nano_secs,
+        HEXLOWER.encode(digest.as_bytes())
+    );
     nano_secs
 }

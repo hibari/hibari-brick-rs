@@ -27,10 +27,10 @@ use std::io::{self, SeekFrom};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
-use std::sync::mpsc::{channel, Sender, SendError, Receiver};
+use std::sync::mpsc::{channel, Receiver, SendError, Sender};
 use std::thread;
 
-use super::hunk::{self, BinaryHunk, BlobSingleHunk, BlobWalHunk, BoxedHunk, CHECKSUM_LEN, Hunk};
+use super::hunk::{self, BinaryHunk, BlobSingleHunk, BlobWalHunk, BoxedHunk, Hunk, CHECKSUM_LEN};
 use super::wal::{AllocatedPrivateHLogPosition, HunkOffset, SeqNum, WalWriter};
 
 // TODO: Configurable
@@ -51,8 +51,8 @@ thread_local!{
 pub enum Request {
     Poke,
     WriteBack,
-    // FullWriteBack(Promise<bool>), // No need for full write back because
-                                     // keys/metadata are not in the WAL.
+    // No need for full write back because keys/metadata are not in the WAL.
+    // FullWriteBack(Promise<bool>),
     Shutdown(Promise<bool>),
 }
 
@@ -73,7 +73,9 @@ impl WriteBack {
 
         // TODO: Give a name to the threads. (Hint: Use thread builder)
         thread::spawn(move || handle_requests(&rx));
-        WriteBack { queue: Mutex::new(tx) }
+        WriteBack {
+            queue: Mutex::new(tx),
+        }
     }
 
     pub fn poke() {
@@ -124,10 +126,11 @@ fn handle_requests(rx: &Receiver<Request>) {
 fn start_write_back_scheduler(interval: chrono::Duration) -> (timer::Timer, timer::Guard) {
     let timer = timer::Timer::new();
     // holding the guard seems required, otherwise timer will never go off.
-    let guard = timer.schedule_repeating(interval, || 
+    let guard = timer.schedule_repeating(interval, || {
         if !IS_WRITE_BACK_RUNNING.load(Ordering::Relaxed) {
             let _ignore = send(Request::WriteBack); // avoid unwrapping here.
-        });
+        }
+    });
     (timer, guard)
 }
 
@@ -145,10 +148,12 @@ fn write_back_wals(last_pos: HunkOffset, block_size: u64) -> io::Result<HunkOffs
     Ok(new_pos)
 }
 
-fn write_back_wal(seq_num: SeqNum,
-                  start_pos: HunkOffset,
-                  end_pos: HunkOffset, 
-                  block_size: u64) -> io::Result<HunkOffset> {
+fn write_back_wal(
+    seq_num: SeqNum,
+    start_pos: HunkOffset,
+    end_pos: HunkOffset,
+    block_size: u64,
+) -> io::Result<HunkOffset> {
     let mut f = WalWriter::open_wal_for_read(seq_num)?;
     let mut cur_pos = f.seek(SeekFrom::Start(start_pos))?;
     assert_eq!(cur_pos, start_pos);
@@ -158,10 +163,14 @@ fn write_back_wal(seq_num: SeqNum,
 
     while cur_pos < end_pos {
         let actual_size = f.read(&mut buf[read_offset..])? as u64;
-        debug!("Writeback: read {} bytes from WAL({}).", actual_size, seq_num);
+        debug!(
+            "Writeback: read {} bytes from WAL({}).",
+            actual_size, seq_num
+        );
 
         cur_pos += actual_size;
-        let bytes_to_parse = ::std::cmp::min(block_size as usize, read_offset + actual_size as usize);
+        let bytes_to_parse =
+            ::std::cmp::min(block_size as usize, read_offset + actual_size as usize);
 
         match write_back_block(&buf[..bytes_to_parse as usize]) {
             Ok(next_offset) => {
@@ -186,16 +195,23 @@ fn write_back_block(bin: &[u8]) -> Result<usize, (hunk::ParseError, usize)> {
     // TODO CHECKME: For better performance, maybe we should only parse hunk headers and use memcpy
     // for copying actual hunks?
     let (hunks, next_offset) = hunk::decode_hunks(bin, 0)?;
-    debug!("Writeback: decoded {} hunks. Remaining {} byte(s).",
-           hunks.len(),
-           bin.len() - next_offset);
+    debug!(
+        "Writeback: decoded {} hunks. Remaining {} byte(s).",
+        hunks.len(),
+        bin.len() - next_offset
+    );
 
     let mut hunks_by_brick = HashMap::new();
 
     // TODO: Use Rayon's parallel map to distribute checksum calculations across processor cores.
     for boxed_hunk in hunks {
         if let BoxedHunk::BlobWal(blob_wal_hunk) = boxed_hunk {
-            let BlobWalHunk { brick_name, flags, mut blobs, /* checksum, */ .. } = blob_wal_hunk;
+            let BlobWalHunk {
+                brick_name,
+                flags,
+                mut blobs, /* checksum, */
+                ..
+            } = blob_wal_hunk;
 
             // TODO: Verify the checksum.
 
@@ -206,15 +222,26 @@ fn write_back_block(bin: &[u8]) -> Result<usize, (hunk::ParseError, usize)> {
             let blob = blobs.pop().expect("Cannot pop blob");
 
             let mut decoder = Deserializer::new(&encoded_pos[..]);
-            let pos: AllocatedPrivateHLogPosition = Deserialize::deserialize(&mut decoder).ok().unwrap();
+            let pos: AllocatedPrivateHLogPosition =
+                Deserialize::deserialize(&mut decoder).ok().unwrap();
 
             let mut value_checksum = [0u8; CHECKSUM_LEN];
             value_checksum.copy_from_slice(&value_checksum_v);
 
-            let blob_single_hunk = BlobSingleHunk::new_with_checksum(blob, &flags, Some(value_checksum));
-            let BinaryHunk { hunk: binary_hunk, hunk_size, .. } = blob_single_hunk.encode();
+            let blob_single_hunk =
+                BlobSingleHunk::new_with_checksum(blob, &flags, Some(value_checksum));
+            let BinaryHunk {
+                hunk: binary_hunk,
+                hunk_size,
+                ..
+            } = blob_single_hunk.encode();
 
-            let rec =  WriteBackRecord { hunk: binary_hunk, hunk_size, key, pos };
+            let rec = WriteBackRecord {
+                hunk: binary_hunk,
+                hunk_size,
+                key,
+                pos,
+            };
             let hunks = hunks_by_brick.entry(brick_name).or_insert_with(Vec::new);
             hunks.push(rec);
         } else {

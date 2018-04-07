@@ -14,11 +14,11 @@
 //  limitations under the License.
 // ----------------------------------------------------------------------
 
-#![cfg_attr(feature="clippy", feature(plugin))]
-#![cfg_attr(feature="clippy", plugin(clippy))]
+#![cfg_attr(feature = "clippy", feature(plugin))]
+#![cfg_attr(feature = "clippy", plugin(clippy))]
 
-extern crate hibari_brick_rs as brick;
 extern crate env_logger;
+extern crate hibari_brick_rs as brick;
 
 use std::thread;
 use std::sync::Arc;
@@ -40,8 +40,7 @@ fn main() {
         let mut large_value = vec![0; VALUE_SIZE];
         large_value[..value.len()].copy_from_slice(value);
 
-        brick::put(brick_id, key, large_value)
-            .expect(&format!("Failed to put a key {}", key_str));
+        brick::put(brick_id, key, large_value).expect(&format!("Failed to put a key {}", key_str));
     };
 
     let get_op = |brick_id: brick::BrickId, key_str: &str, key: &[u8], value: &[u8]| {
@@ -52,20 +51,34 @@ fn main() {
         assert_eq!(value, &val[..value.len()]);
     };
 
-    do_ops(&brick_ids[..], NUM_THREADS, NUM_KEYS_PER_THREAD, "put", put_op);
-    do_ops(&brick_ids[..], NUM_THREADS, NUM_KEYS_PER_THREAD, "get", get_op);
+    do_ops(
+        &brick_ids[..],
+        NUM_THREADS,
+        NUM_KEYS_PER_THREAD,
+        "put",
+        put_op,
+    );
+    do_ops(
+        &brick_ids[..],
+        NUM_THREADS,
+        NUM_KEYS_PER_THREAD,
+        "get",
+        get_op,
+    );
 
     brick::shutdown();
 
     println!("Done!");
 }
 
-fn do_ops<F>(brick_ids: &[brick::BrickId],
-             num_threads: u32,
-             num_keys_per_thread: u32,
-             op_name: &str,
-             op: F)
-    where F: Fn(brick::BrickId, &str, &[u8], &[u8]) + Send + Sync + 'static
+fn do_ops<F>(
+    brick_ids: &[brick::BrickId],
+    num_threads: u32,
+    num_keys_per_thread: u32,
+    op_name: &str,
+    op: F,
+) where
+    F: Fn(brick::BrickId, &str, &[u8], &[u8]) + Send + Sync + 'static,
 {
     let num_bricks = brick_ids.len();
     let op = Arc::new(op);
@@ -93,7 +106,10 @@ fn do_ops<F>(brick_ids: &[brick::BrickId],
                     count += 1;
                 }
 
-                println!("Thread {} ended. (Performed {} {} operations.", n, count, my_op_name);
+                println!(
+                    "Thread {} ended. (Performed {} {} operations.",
+                    n, count, my_op_name
+                );
 
                 assert_eq!(num_keys_per_thread, count);
             })

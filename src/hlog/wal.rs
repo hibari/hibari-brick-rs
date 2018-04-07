@@ -17,7 +17,7 @@
 // TODO: Implement group commit.
 
 use chrono;
-use promising_future::{future_promise, Promise, Future};
+use promising_future::{future_promise, Future, Promise};
 use timer;
 
 use std::io::prelude::*;
@@ -28,7 +28,7 @@ use std::fs::File;
 use std::io::{self, BufReader, BufWriter, SeekFrom};
 use std::path::PathBuf;
 use std::sync::Mutex;
-use std::sync::mpsc::{channel, Sender, SendError, Receiver};
+use std::sync::mpsc::{channel, Receiver, SendError, Sender};
 use std::thread;
 
 use blake2_rfc::blake2b::Blake2b;
@@ -103,13 +103,15 @@ pub struct PutBlobResult {
 }
 
 impl Request {
-    fn new_put_blob(prom: Promise<io::Result<PutBlobResult>>,
-                    brick_id: BrickId,
-                    key: Vec<u8>,
-                    value: Vec<u8>,
-                    value_checksum: Vec<u8>,
-                    hasher: Option<Blake2b>) -> Request {
-        let payload = PutBlobPayload{
+    fn new_put_blob(
+        prom: Promise<io::Result<PutBlobResult>>,
+        brick_id: BrickId,
+        key: Vec<u8>,
+        value: Vec<u8>,
+        value_checksum: Vec<u8>,
+        hasher: Option<Blake2b>,
+    ) -> Request {
+        let payload = PutBlobPayload {
             brick_id,
             key,
             value,
@@ -119,7 +121,6 @@ impl Request {
         Request::PutBlob(prom, Box::new(payload))
     }
 }
-
 
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub struct WalPosition {
@@ -171,7 +172,9 @@ impl WalWriter {
             handle_requests(&rx, writer);
         });
 
-        WalWriter { queue: Mutex::new(tx) }
+        WalWriter {
+            queue: Mutex::new(tx),
+        }
     }
 
     pub fn add_brick(brick_name: &str) -> BrickId {
@@ -186,7 +189,11 @@ impl WalWriter {
         future.value().unwrap()
     }
 
-    pub fn put_value(brick_id: BrickId, key: Vec<u8>, value: Vec<u8>) -> Future<io::Result<PutBlobResult>> {
+    pub fn put_value(
+        brick_id: BrickId,
+        key: Vec<u8>,
+        value: Vec<u8>,
+    ) -> Future<io::Result<PutBlobResult>> {
         // if !NoChecksum
 
         let mut hasher = Blake2b::new(hunk::CHECKSUM_LEN);
@@ -202,10 +209,10 @@ impl WalWriter {
     }
 
     // Executed by the *client* thread
-    pub fn get_value(_brick_id: BrickId,
-                     wal_position: &WalPosition)
-                     -> io::Result<Option<Vec<u8>>> {
-
+    pub fn get_value(
+        _brick_id: BrickId,
+        wal_position: &WalPosition,
+    ) -> io::Result<Option<Vec<u8>>> {
         let position = wal_position.wal_hunk_pos + u64::from(wal_position.val_offset);
 
         // read blob (from HLog or WAL)
@@ -268,7 +275,6 @@ fn send(req: Request) -> Result<(), SendError<Request>> {
 }
 
 fn handle_requests(rx: &Receiver<Request>, mut writer: BufWriter<File>) {
-
     // State
     // let mut seq_num: SeqNum = 0u32;
     let mut pos: HunkOffset = 0u64;
@@ -296,11 +302,12 @@ fn handle_requests(rx: &Receiver<Request>, mut writer: BufWriter<File>) {
                 // TODO: Bound check
                 let mut brick_info = &mut brick_info_v[req.brick_id];
                 let brick_name = brick_info.brick_name.to_string();
-                let result = do_put_blob(&mut writer, &mut pos, &mut brick_info, req)
-                    .map(|wal_position| PutBlobResult {
+                let result = do_put_blob(&mut writer, &mut pos, &mut brick_info, req).map(
+                    |wal_position| PutBlobResult {
                         brick_name,
                         storage_position: wal_position,
-                    });
+                    },
+                );
                 promise.set(result);
             }
             Request::Flush(promise) => {
@@ -316,18 +323,21 @@ fn handle_requests(rx: &Receiver<Request>, mut writer: BufWriter<File>) {
                 writer.flush().unwrap();
                 super::write_back::WriteBack::shutdown();
                 promise.set(true);
-                break;  // exit from the event loop.
+                break; // exit from the event loop.
             }
         }
     }
 }
 
-fn do_add_brick(brick_name: &str,
-                brick_ids: &mut HashMap<String, BrickId>,
-                brick_info_v: &mut Vec<BrickInfo>)
-                -> BrickId {
+fn do_add_brick(
+    brick_name: &str,
+    brick_ids: &mut HashMap<String, BrickId>,
+    brick_info_v: &mut Vec<BrickInfo>,
+) -> BrickId {
     let next_new_id = brick_info_v.len();
-    let brick_id = brick_ids.entry(brick_name.to_owned()).or_insert(next_new_id);
+    let brick_id = brick_ids
+        .entry(brick_name.to_owned())
+        .or_insert(next_new_id);
     if *brick_id == next_new_id {
         let brick_info = BrickInfo {
             brick_name: brick_name.to_string(),
@@ -340,11 +350,12 @@ fn do_add_brick(brick_name: &str,
     brick_id.to_owned()
 }
 
-fn do_put_blob(writer: &mut BufWriter<File>,
-               mut pos: &mut HunkOffset,
-               mut brick_info: &mut BrickInfo,
-               req:PutBlobPayload)
-               -> io::Result<WalPosition> {
+fn do_put_blob(
+    writer: &mut BufWriter<File>,
+    mut pos: &mut HunkOffset,
+    mut brick_info: &mut BrickInfo,
+    req: PutBlobPayload,
+) -> io::Result<WalPosition> {
     let hunk_flags = Vec::new();
     let val_len = req.value.len() as Len;
 
@@ -357,7 +368,9 @@ fn do_put_blob(writer: &mut BufWriter<File>,
         hunk_pos: *private_hunk_pos,
     };
     let mut encoded_pos: Vec<u8> = Vec::new();
-    private_hlog_pos.serialize(&mut Serializer::new(&mut encoded_pos)).unwrap();
+    private_hlog_pos
+        .serialize(&mut Serializer::new(&mut encoded_pos))
+        .unwrap();
 
     let checksum =
         // if !NoChecksum
@@ -371,12 +384,23 @@ fn do_put_blob(writer: &mut BufWriter<File>,
             None
         };
 
-    let blobs = vec![Blob(req.value), Blob(req.value_checksum), Blob(req.key), Blob(encoded_pos)];
+    let blobs = vec![
+        Blob(req.value),
+        Blob(req.value_checksum),
+        Blob(req.key),
+        Blob(encoded_pos),
+    ];
 
-    let hunk = BlobWalHunk::new_with_checksum(&brick_info.brick_name, blobs, hunk_flags.clone(), checksum);
+    let hunk =
+        BlobWalHunk::new_with_checksum(&brick_info.brick_name, blobs, hunk_flags.clone(), checksum);
     let maybe_checksum_string = checksum.map(|digest| HEXLOWER.encode(&digest[..]));
 
-    let BinaryHunk { hunk: binary_hunk, hunk_size, blob_index, .. } = hunk.encode();
+    let BinaryHunk {
+        hunk: binary_hunk,
+        hunk_size,
+        blob_index,
+        ..
+    } = hunk.encode();
     writer.write_all(&binary_hunk[..])?;
 
     let wal_position = WalPosition {
@@ -388,8 +412,11 @@ fn do_put_blob(writer: &mut BufWriter<File>,
         val_len: val_len as Len,
         checksum_string: maybe_checksum_string,
     };
-    let HunkSize { raw_size, padding_size, .. } =
-        hunk::calc_hunk_size(&HunkType::BlobSingle, &hunk_flags, 0, 1, val_len);
+    let HunkSize {
+        raw_size,
+        padding_size,
+        ..
+    } = hunk::calc_hunk_size(&HunkType::BlobSingle, &hunk_flags, 0, 1, val_len);
     *pos += HunkOffset::from(hunk_size);
     *private_hunk_pos += HunkOffset::from(raw_size) + HunkOffset::from(padding_size);
     Ok(wal_position)

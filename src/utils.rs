@@ -18,10 +18,11 @@ use std::{fs, io};
 use std::path::Path;
 
 pub fn create_dir_if_missing<P: AsRef<Path>>(path: P) -> io::Result<()> {
-    fs::create_dir(path)
-        .or_else(|e| if e.kind() == io::ErrorKind::AlreadyExists {
+    fs::create_dir(path).or_else(|e| {
+        if e.kind() == io::ErrorKind::AlreadyExists {
             Ok(())
         } else {
             Err(e)
-        })
+        }
+    })
 }

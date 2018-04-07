@@ -14,7 +14,7 @@
 //  limitations under the License.
 // ----------------------------------------------------------------------
 
-use blake2_rfc::blake2b::{blake2b, Blake2b};
+use blake2_rfc::blake2b::{Blake2b, blake2b};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 
 // use std::io;
@@ -114,7 +114,6 @@ use std::io::{Cursor, Write};
 //   * Blob Ages  (1 byte * NumberOfBlobs, ubint))
 //   * Padding                                          Total hunk size is aligned to 8 byte boundary
 
-
 // Need fixed-length types for better space utilization? Perhaps
 // smaller blob (< 16 bytes or so) might be embedded into its metadata
 // (= value_in_ram).
@@ -130,13 +129,13 @@ const HUNK_HEADER_SIZE: u8 = 12;
 const HUNK_MIN_FOOTER_SIZE: u8 = 2;
 const HUNK_ALIGNMENT: u8 = 8;
 
-const HUNK_HEADER_MAGIC: &[u8] = &[0x90u8, 0x7Fu8];  // 144, 127
-const HUNK_FOOTER_MAGIC: &[u8] = &[0x07u8, 0xE3u8];  //   7, 227
+const HUNK_HEADER_MAGIC: &[u8] = &[0x90u8, 0x7Fu8]; // 144, 127
+const HUNK_FOOTER_MAGIC: &[u8] = &[0x07u8, 0xE3u8]; //   7, 227
 
 const TYPE_METADATA: u8 = b'm';
 const TYPE_BLOB_WAL: u8 = b'w';
 const TYPE_BLOB_SINGLE: u8 = b's';
-const TYPE_BLOB_MULTI: u8 = b'p';  // "p" stands for "packed" blobs. ("m" is already taken)
+const TYPE_BLOB_MULTI: u8 = b'p'; // "p" stands for "packed" blobs. ("m" is already taken)
 
 // Flags are stored in 1 byte space, so we can put up to 8 flags.
 const FLAG_NO_CHECKSUM: u8 = 0b_0000_0001;
@@ -233,11 +232,12 @@ impl BlobWalHunk {
         }
     }
 
-    pub fn new_with_checksum(brick_name: &str,
-                             blobs: Vec<Blob>,
-                             flags: Vec<HunkFlag>,
-                             checksum: Option<RawDigest>)
-                             -> Self {
+    pub fn new_with_checksum(
+        brick_name: &str,
+        blobs: Vec<Blob>,
+        flags: Vec<HunkFlag>,
+        checksum: Option<RawDigest>,
+    ) -> Self {
         BlobWalHunk {
             hunk_type: HunkType::BlobWal,
             brick_name: brick_name.to_string(),
@@ -250,8 +250,21 @@ impl BlobWalHunk {
 
 impl Hunk for BlobWalHunk {
     fn encode(self) -> BinaryHunk {
-        let BlobWalHunk { hunk_type, flags, brick_name, blobs, checksum } = self;
-        encode_hunk(hunk_type, &flags[..], Some(brick_name), blobs, &None, checksum)
+        let BlobWalHunk {
+            hunk_type,
+            flags,
+            brick_name,
+            blobs,
+            checksum,
+        } = self;
+        encode_hunk(
+            hunk_type,
+            &flags[..],
+            Some(brick_name),
+            blobs,
+            &None,
+            checksum,
+        )
     }
 }
 
@@ -267,10 +280,7 @@ impl BlobSingleHunk {
         }
     }
 
-    pub fn new_with_checksum(blob: Blob,
-                             flags: &[HunkFlag],
-                             checksum: Option<RawDigest>)
-                             -> Self {
+    pub fn new_with_checksum(blob: Blob, flags: &[HunkFlag], checksum: Option<RawDigest>) -> Self {
         BlobSingleHunk {
             hunk_type: HunkType::BlobSingle,
             flags: clone_flags(flags),
@@ -280,11 +290,12 @@ impl BlobSingleHunk {
         }
     }
 
-    pub fn new_with_age_and_checksum(blob: Blob,
-                                     flags: Vec<HunkFlag>,
-                                     age: u8,
-                                     checksum: Option<RawDigest>)
-                                     -> Self {
+    pub fn new_with_age_and_checksum(
+        blob: Blob,
+        flags: Vec<HunkFlag>,
+        age: u8,
+        checksum: Option<RawDigest>,
+    ) -> Self {
         BlobSingleHunk {
             hunk_type: HunkType::BlobSingle,
             flags,
@@ -297,7 +308,13 @@ impl BlobSingleHunk {
 
 impl Hunk for BlobSingleHunk {
     fn encode(self) -> BinaryHunk {
-        let BlobSingleHunk { hunk_type, flags, blob, age, checksum } = self;
+        let BlobSingleHunk {
+            hunk_type,
+            flags,
+            blob,
+            age,
+            checksum,
+        } = self;
         let blobs = vec![blob];
         let ages = vec![age];
         encode_hunk(hunk_type, &flags[..], None, blobs, &Some(ages), checksum)
@@ -317,11 +334,12 @@ impl BlobMultiHunk {
         }
     }
 
-    pub fn new_with_ages_and_checksum(blobs: Vec<Blob>,
-                                      flags: Vec<HunkFlag>,
-                                      ages: &[u8],
-                                      checksum: Option<RawDigest>)
-                                      -> Self {
+    pub fn new_with_ages_and_checksum(
+        blobs: Vec<Blob>,
+        flags: Vec<HunkFlag>,
+        ages: &[u8],
+        checksum: Option<RawDigest>,
+    ) -> Self {
         BlobMultiHunk {
             hunk_type: HunkType::BlobMulti,
             flags,
@@ -334,77 +352,110 @@ impl BlobMultiHunk {
 
 impl Hunk for BlobMultiHunk {
     fn encode(self) -> BinaryHunk {
-        let BlobMultiHunk { hunk_type, flags, blobs, ages, checksum } = self;
+        let BlobMultiHunk {
+            hunk_type,
+            flags,
+            blobs,
+            ages,
+            checksum,
+        } = self;
         encode_hunk(hunk_type, &flags[..], None, blobs, &Some(ages), checksum)
     }
 }
 
-pub fn calc_hunk_size(hunk_type: &HunkType,
-                      hunk_flags: &[HunkFlag],
-                      brick_name_size: u16,
-                      number_of_blobs: u16,
-                      total_blob_size: u32)
-                      -> HunkSize {
-    let checksum_size: u16 = if has_checksum(hunk_flags) { CHECKSUM_LEN as u16 } else { 0 };
+pub fn calc_hunk_size(
+    hunk_type: &HunkType,
+    hunk_flags: &[HunkFlag],
+    brick_name_size: u16,
+    number_of_blobs: u16,
+    total_blob_size: u32,
+) -> HunkSize {
+    let checksum_size: u16 = if has_checksum(hunk_flags) {
+        CHECKSUM_LEN as u16
+    } else {
+        0
+    };
     let blob_index_size: u16 = if *hunk_type == HunkType::BlobSingle {
         0
     } else {
         4 * number_of_blobs
     };
-    let blob_age_size: u16 = if *hunk_type == HunkType::BlobSingle ||
-                                *hunk_type == HunkType::BlobMulti {
-        number_of_blobs
-    } else {
-        0
-    };
+    let blob_age_size: u16 =
+        if *hunk_type == HunkType::BlobSingle || *hunk_type == HunkType::BlobMulti {
+            number_of_blobs
+        } else {
+            0
+        };
 
-    let footer_size = u16::from(HUNK_MIN_FOOTER_SIZE) + checksum_size + brick_name_size + blob_index_size +
-                      blob_age_size;
+    let footer_size = u16::from(HUNK_MIN_FOOTER_SIZE) + checksum_size + brick_name_size
+        + blob_index_size + blob_age_size;
     // raw_size includes footer_size.
     let raw_size = u32::from(HUNK_HEADER_SIZE) + total_blob_size + u32::from(footer_size);
     let rem: u8 = (raw_size % u32::from(HUNK_ALIGNMENT)) as u8;
     let padding_size: u8 = if rem == 0 { 0 } else { HUNK_ALIGNMENT - rem };
     let overhead = (raw_size + u32::from(padding_size) - total_blob_size) as u8;
-    HunkSize { raw_size, footer_size, padding_size, overhead }
+    HunkSize {
+        raw_size,
+        footer_size,
+        padding_size,
+        overhead,
+    }
 }
 
-fn encode_hunk(hunk_type: HunkType,
-               flags: &[HunkFlag],
-               brick_name: Option<String>,
-               blobs: Vec<Blob>,
-               blob_ages: &Option<Vec<u8>>,
-               checksum: Option<RawDigest>)
-               -> BinaryHunk {
+fn encode_hunk(
+    hunk_type: HunkType,
+    flags: &[HunkFlag],
+    brick_name: Option<String>,
+    blobs: Vec<Blob>,
+    blob_ages: &Option<Vec<u8>>,
+    checksum: Option<RawDigest>,
+) -> BinaryHunk {
     let (encoded_brick_name, brick_name_size) = encode_brick_name(brick_name);
     if checksum.is_none() {
         assert!(!has_checksum(flags))
     }
     let (blob_index, number_of_blobs) = create_blob_index(&blobs);
     let total_blob_size = total_blob_size(&blobs);
-    let HunkSize { raw_size, padding_size, overhead, .. } = calc_hunk_size(&hunk_type,
-                                                                           flags,
-                                                                           brick_name_size,
-                                                                           number_of_blobs,
-                                                                           total_blob_size);
+    let HunkSize {
+        raw_size,
+        padding_size,
+        overhead,
+        ..
+    } = calc_hunk_size(
+        &hunk_type,
+        flags,
+        brick_name_size,
+        number_of_blobs,
+        total_blob_size,
+    );
     let hunk_size = raw_size + u32::from(padding_size);
     let mut hunk = Vec::with_capacity(hunk_size as usize);
 
-    append_hunk_header(&mut hunk,
-                       &hunk_type,
-                       flags,
-                       brick_name_size,
-                       number_of_blobs,
-                       total_blob_size);
+    append_hunk_header(
+        &mut hunk,
+        &hunk_type,
+        flags,
+        brick_name_size,
+        number_of_blobs,
+        total_blob_size,
+    );
     append_blobs(&mut hunk, blobs);
-    append_hunk_footer(&mut hunk,
-                       &hunk_type,
-                       checksum,
-                       encoded_brick_name,
-                       blob_ages,
-                       &blob_index,
-                       padding_size);
+    append_hunk_footer(
+        &mut hunk,
+        &hunk_type,
+        checksum,
+        encoded_brick_name,
+        blob_ages,
+        &blob_index,
+        padding_size,
+    );
 
-    BinaryHunk {hunk, hunk_size, overhead, blob_index }
+    BinaryHunk {
+        hunk,
+        hunk_size,
+        overhead,
+        blob_index,
+    }
 }
 
 fn create_blob_index(blobs: &[Blob]) -> (Vec<u32>, u16) {
@@ -423,12 +474,14 @@ fn create_blob_index(blobs: &[Blob]) -> (Vec<u32>, u16) {
     (blob_index, blob_count as u16)
 }
 
-fn append_hunk_header(mut hunk: &mut Vec<u8>,
-                      hunk_type: &HunkType,
-                      flags: &[HunkFlag],
-                      brick_name_size: u16,
-                      number_of_blobs: u16,
-                      total_blob_size: u32) {
+fn append_hunk_header(
+    mut hunk: &mut Vec<u8>,
+    hunk_type: &HunkType,
+    flags: &[HunkFlag],
+    brick_name_size: u16,
+    number_of_blobs: u16,
+    total_blob_size: u32,
+) {
     hunk.extend_from_slice(HUNK_HEADER_MAGIC);
     append_encoded_type(&mut hunk, hunk_type);
     append_encoded_flags(&mut hunk, flags);
@@ -444,13 +497,15 @@ fn append_blobs(hunk: &mut Vec<u8>, blobs: Vec<Blob>) {
     }
 }
 
-fn append_hunk_footer(hunk: &mut Vec<u8>,
-                      hunk_type: &HunkType,
-                      checksum: Option<RawDigest>,
-                      encoded_brick_name: Option<Vec<u8>>,
-                      blob_ages: &Option<Vec<u8>>,
-                      blob_index: &[u32],
-                      padding_size: u8) {
+fn append_hunk_footer(
+    hunk: &mut Vec<u8>,
+    hunk_type: &HunkType,
+    checksum: Option<RawDigest>,
+    encoded_brick_name: Option<Vec<u8>>,
+    blob_ages: &Option<Vec<u8>>,
+    blob_index: &[u32],
+    padding_size: u8,
+) {
     hunk.extend_from_slice(HUNK_FOOTER_MAGIC);
 
     if let Some(checksum) = checksum {
@@ -546,10 +601,17 @@ fn encode_brick_name(brick_name: Option<String>) -> (Option<Vec<u8>>, u16) {
 }
 
 fn total_blob_size(blobs: &[Blob]) -> u32 {
-    blobs.iter().fold(0, |acc, &Blob(ref blob)| acc + blob.len()) as u32
+    blobs
+        .iter()
+        .fold(0, |acc, &Blob(ref blob)| {
+            acc + blob.len()
+        }) as u32
 }
 
-pub fn decode_hunks(bin: &[u8], start_offset: usize) -> Result<(Vec<BoxedHunk>, usize), (ParseError, usize)> {
+pub fn decode_hunks(
+    bin: &[u8],
+    start_offset: usize,
+) -> Result<(Vec<BoxedHunk>, usize), (ParseError, usize)> {
     let mut hunks = Vec::new();
     let mut offset = start_offset;
     while offset < bin.len() {
@@ -576,11 +638,17 @@ fn decode_hunk(bin: &[u8], offset: usize) -> Result<(BoxedHunk, usize), (ParseEr
     let (hunk_type, flags, brick_name_size, number_of_blobs, total_blob_size) =
         decode_header(&bin[..header_size]).unwrap();
 
-    let HunkSize { footer_size, padding_size, .. } = calc_hunk_size(&hunk_type,
-                                                                    &flags,
-                                                                    brick_name_size,
-                                                                    number_of_blobs,
-                                                                    total_blob_size);
+    let HunkSize {
+        footer_size,
+        padding_size,
+        ..
+    } = calc_hunk_size(
+        &hunk_type,
+        &flags,
+        brick_name_size,
+        number_of_blobs,
+        total_blob_size,
+    );
 
     let footer_start = header_size + total_blob_size as usize;
     let footer_end = footer_start + footer_size as usize + padding_size as usize;
@@ -593,38 +661,52 @@ fn decode_hunk(bin: &[u8], offset: usize) -> Result<(BoxedHunk, usize), (ParseEr
     let body_slice = &bin[header_size..footer_start];
     let footer_slice = &bin[footer_start..footer_end];
 
-    let ParseHunkFooterResult { checksum, brick_name, blob_index_range, blob_ages_range } =
-        parse_hunk_footer(&hunk_type,
-                          has_checksum(&flags),
-                          brick_name_size,
-                          number_of_blobs,
-                          footer_slice)
-            .unwrap();
+    let ParseHunkFooterResult {
+        checksum,
+        brick_name,
+        blob_index_range,
+        blob_ages_range,
+    } = parse_hunk_footer(
+        &hunk_type,
+        has_checksum(&flags),
+        brick_name_size,
+        number_of_blobs,
+        footer_slice,
+    ).unwrap();
     let blob_index_slice = &footer_slice[blob_index_range.0..blob_index_range.1];
 
     let hunk = match hunk_type {
         HunkType::Metadata => unimplemented!(),
         HunkType::BlobWal => {
             let blobs = parse_hunk_body(body_slice, blob_index_slice, number_of_blobs).unwrap();
-            BoxedHunk::BlobWal(BlobWalHunk::new_with_checksum(&brick_name.unwrap(), blobs, flags, checksum))
+            BoxedHunk::BlobWal(BlobWalHunk::new_with_checksum(
+                &brick_name.unwrap(),
+                blobs,
+                flags,
+                checksum,
+            ))
         }
         HunkType::BlobSingle => {
             let blob = create_vec_u8_from_slice(body_slice);
             let blob_ages_range = blob_ages_range.unwrap();
             assert_eq!(1, blob_ages_range.1 - blob_ages_range.0);
-            BoxedHunk::BlobSingle(BlobSingleHunk::new_with_age_and_checksum(Blob(blob),
-                                                                            flags,
-                                                                            footer_slice[blob_ages_range.0],
-                                                                            checksum))
+            BoxedHunk::BlobSingle(BlobSingleHunk::new_with_age_and_checksum(
+                Blob(blob),
+                flags,
+                footer_slice[blob_ages_range.0],
+                checksum,
+            ))
         }
         HunkType::BlobMulti => {
             let blobs = parse_hunk_body(body_slice, blob_index_slice, number_of_blobs).unwrap();
             let blob_ages_range = blob_ages_range.unwrap();
             let blob_ages_slice = &footer_slice[blob_ages_range.0..blob_ages_range.1];
-            BoxedHunk::BlobMulti(BlobMultiHunk::new_with_ages_and_checksum(blobs,
-                                                                           flags,
-                                                                           blob_ages_slice,
-                                                                           checksum))
+            BoxedHunk::BlobMulti(BlobMultiHunk::new_with_ages_and_checksum(
+                blobs,
+                flags,
+                blob_ages_slice,
+                checksum,
+            ))
         }
     };
 
@@ -642,13 +724,20 @@ fn decode_header(header: &[u8]) -> Result<(HunkType, Vec<HunkFlag>, u16, u16, u3
     let decoded_type = decode_type(hunk_type)?;
     let decoded_flags = decode_flags(flags)?;
 
-    Ok((decoded_type, decoded_flags, brick_name_size, number_of_blobs, total_blob_size))
+    Ok((
+        decoded_type,
+        decoded_flags,
+        brick_name_size,
+        number_of_blobs,
+        total_blob_size,
+    ))
 }
 
-fn parse_hunk_body(blob_slice: &[u8],
-                   blob_index_bin: &[u8],
-                   number_of_blobs: u16)
-                   -> Result<Vec<Blob>, ParseError> {
+fn parse_hunk_body(
+    blob_slice: &[u8],
+    blob_index_bin: &[u8],
+    number_of_blobs: u16,
+) -> Result<Vec<Blob>, ParseError> {
     if blob_index_bin.len() / 4 != number_of_blobs as usize {
         return Err(ParseError);
     }
@@ -667,7 +756,6 @@ fn parse_hunk_body(blob_slice: &[u8],
             blobs.push(Blob(blob));
             start_offset = end_offset;
         }
-
     }
 
     let blob = create_vec_u8_from_slice(&blob_slice[start_offset..]);
@@ -683,12 +771,13 @@ struct ParseHunkFooterResult {
     blob_ages_range: Option<(usize, usize)>,
 }
 
-fn parse_hunk_footer(hunk_type: &HunkType,
-                     has_checksum: bool,
-                     brick_name_size: u16,
-                     number_of_blobs: u16,
-                     footer_slice: &[u8])
-                     -> Result<ParseHunkFooterResult, ParseError> {
+fn parse_hunk_footer(
+    hunk_type: &HunkType,
+    has_checksum: bool,
+    brick_name_size: u16,
+    number_of_blobs: u16,
+    footer_slice: &[u8],
+) -> Result<ParseHunkFooterResult, ParseError> {
     if !footer_slice.starts_with(HUNK_FOOTER_MAGIC) {
         return Err(ParseError);
     }
@@ -771,13 +860,12 @@ fn create_vec_u8_from_slice(bin: &[u8]) -> Vec<u8> {
 
 // ---------------------------------------------------------------------------
 
-
 #[cfg(test)]
 mod tests {
     extern crate env_logger;
 
-    use super::{calc_hunk_size, decode_hunks, BinaryHunk, Blob, BlobWalHunk, BlobSingleHunk,
-                BlobMultiHunk, BoxedHunk, Hunk, HunkFlag, HunkSize, HunkType, ParseError};
+    use super::{calc_hunk_size, decode_hunks, BinaryHunk, Blob, BlobMultiHunk, BlobSingleHunk,
+                BlobWalHunk, BoxedHunk, Hunk, HunkFlag, HunkSize, HunkType, ParseError};
 
     // Blake2s checksum can be generated by:
     //   python3 -c "import hashlib; print(hashlib.blake2b(b'Hello, world!', digest_size=32).hexdigest())"
@@ -801,9 +889,15 @@ mod tests {
         }
 
         {
-            let blobs = vec![make_blob(blob1_src), make_blob(blob2_src), make_blob(blob3_src)];
+            let blobs = vec![
+                make_blob(blob1_src),
+                make_blob(blob2_src),
+                make_blob(blob3_src),
+            ];
             let hunk = BlobWalHunk::new(brick_name, blobs, &hunk_flags);
-            let BinaryHunk { hunk: binary_hunk, .. } = hunk.encode();
+            let BinaryHunk {
+                hunk: binary_hunk, ..
+            } = hunk.encode();
 
             let expected = vec![// header magic numbers
                                 0x90,
@@ -913,7 +1007,9 @@ mod tests {
             // Zero-byte blob. NOTE: Hibari will not create blob at all for this case.
             let blobs = Vec::new();
             let hunk = BlobMultiHunk::new(blobs, &hunk_flags_no_checksum);
-            let BinaryHunk { hunk: binary_hunk, .. } = hunk.encode();
+            let BinaryHunk {
+                hunk: binary_hunk, ..
+            } = hunk.encode();
 
             let expected = vec![// header magic numbers
                                 0x90,
@@ -947,7 +1043,11 @@ mod tests {
         }
 
         {
-            let blobs = vec![make_blob(blob1_src), make_blob(blob2_src), make_blob(blob3_src)];
+            let blobs = vec![
+                make_blob(blob1_src),
+                make_blob(blob2_src),
+                make_blob(blob3_src),
+            ];
             let hunk = BlobMultiHunk::new(blobs, &hunk_flags);
             let _binary_hunk = hunk.encode();
         }
@@ -1065,8 +1165,11 @@ mod tests {
                 Ok((boxed_hunks, _offset)) => {
                     assert_eq!(1, boxed_hunks.len());
                     if let &BoxedHunk::BlobWal(ref hunk) = &boxed_hunks[0] {
-                        let blobs =
-                            vec![make_blob(blob1_src), make_blob(blob2_src), make_blob(blob3_src)];
+                        let blobs = vec![
+                            make_blob(blob1_src),
+                            make_blob(blob2_src),
+                            make_blob(blob3_src),
+                        ];
                         let expected = BlobWalHunk::new(brick_name, blobs, &hunk_flags);
                         assert_eq!(&expected, hunk);
                     } else {
@@ -1091,24 +1194,30 @@ mod tests {
             let blob2 = format!("blob2_{:010}", i);
             let blob3 = format!("blob3_{:010}", i);
             let blob4 = format!("blob4_{:010}", i);
-            vec![make_blob(blob1.as_bytes()),
-                 make_blob(blob2.as_bytes()),
-                 make_blob(blob3.as_bytes()),
-                 make_blob(blob4.as_bytes())]
+            vec![
+                make_blob(blob1.as_bytes()),
+                make_blob(blob2.as_bytes()),
+                make_blob(blob3.as_bytes()),
+                make_blob(blob4.as_bytes()),
+            ]
         }
 
         let expected_bin_size = {
-            let HunkSize{raw_size, padding_size, ..} =
-                calc_hunk_size(&HunkType::BlobWal,
-                               &hunk_flags,
-                               brick_name.as_bytes().len() as u16,
-                               4,
-                               16 * 4);
+            let HunkSize {
+                raw_size,
+                padding_size,
+                ..
+            } = calc_hunk_size(
+                &HunkType::BlobWal,
+                &hunk_flags,
+                brick_name.as_bytes().len() as u16,
+                4,
+                16 * 4,
+            );
             (raw_size as usize + padding_size as usize) * num_hunks
         };
 
         assert!(expected_bin_size % 8 == 0);
-
 
         let mut hunks = Vec::with_capacity(expected_bin_size);
 
@@ -1120,7 +1229,10 @@ mod tests {
                 let blobs = make_blobs(i);
                 let hunk = BlobWalHunk::new(brick_name, blobs, &hunk_flags);
                 let BinaryHunk {
-                    hunk: mut binary_hunk, hunk_size, .. } = hunk.encode();
+                    hunk: mut binary_hunk,
+                    hunk_size,
+                    ..
+                } = hunk.encode();
                 hunks.append(&mut binary_hunk);
                 bin_size += hunk_size as usize;
             }
