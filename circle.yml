@@ -18,7 +18,7 @@ dependencies:
   post:
     - sudo apt update
     - sudo apt install curl file gcc git make openssh-client
-    - sudo apt install libgflags-dev
+    - sudo apt install libgflags-dev llvm-3.9-dev libclang-3.9-dev clang-3.9
     # Delete .gitconfig to prevent "cargo install" and "cargo build" from
     # failing when pulling the registry info (crates.io-index).
     # See https://github.com/rust-lang-ja/rust-by-example-ja/issues/38#issuecomment-238214915

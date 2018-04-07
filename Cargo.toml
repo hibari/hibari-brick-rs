@@ -6,19 +6,19 @@ authors = ["Tatsuya Kawano <tatsuya@hibaridb.org>"]
 [build-dependencies]
 
 [dependencies]
-blake2-rfc = "0.2.17"
-byteorder = "1.0.0"
+blake2-rfc = "0.2.18"
+byteorder = "1.2.2"
 chrono = "0.4.0"
-data-encoding = "2.0.0-rc.1"
+data-encoding = "2.1.1"
 env_logger = "0.4.2"
-lazy_static = "0.2.2"
+lazy_static = "1.0.0"
 log = "0.3.7"
 promising-future = "0.2.4"
 rand = "0.3.15"
-rmp-serde = "0.13.1"
-rocksdb = "0.6.0"
-serde = "1.0.7"
-serde_derive = "1.0.7"
+rmp-serde = "0.13.7"
+rocksdb = "0.10.0"
+serde = "1.0.37"
+serde_derive = "1.0.37"
 # timer = "0.1.4"
 timer = { git = "https://github.com/alexbool/timer.rs" }
 

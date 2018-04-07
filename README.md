@@ -65,7 +65,7 @@ Dropbox and Mozilla (Firefox):
 
 **Tools and libraries to build RocksDB**
 
-- On Linux (Ubuntu), `sudo apt install gcc g++ make libgflags-dev`
+- On Linux (Ubuntu), `sudo apt install clang-5.0 libclang-5.0-dev libgflags-dev llvm-5.0-dev gcc g++ make`
 - On FreeBSD, **TODO**
 
 
