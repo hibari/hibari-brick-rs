@@ -28,7 +28,7 @@ const NUM_KEYS_PER_THREAD: u32 = 50_000;
 const VALUE_SIZE: usize = 1024;
 
 fn main() {
-    env_logger::init().unwrap();
+    env_logger::init();
 
     let brick_names = ["brick1", "brick2", "brick3", "brick4"];
     let mut brick_ids = [0; 4];

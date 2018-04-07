@@ -872,8 +872,6 @@ mod tests {
 
     #[test]
     fn test_encode_hunks() {
-        let _ = env_logger::init();
-
         let brick_name = "brick1";
         let blob1_src = b"Hello";
         let blob2_src = b", ";
@@ -1055,8 +1053,6 @@ mod tests {
 
     #[test]
     fn test_decode_hunks() {
-        let _ = env_logger::init();
-
         let brick_name = "brick1";
         let blob1_src = b"Hello";
         let blob2_src = b", ";
@@ -1183,8 +1179,6 @@ mod tests {
 
     #[test]
     fn test_encode_and_decode_many_wal_hunks() {
-        let _ = env_logger::init();
-
         let num_hunks = 1000;
         let brick_name = "brick1";
         let hunk_flags: [HunkFlag; 0] = [];

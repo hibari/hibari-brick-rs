@@ -135,8 +135,6 @@ mod tests {
     // There may be problem around using task queue with lazy static?
     #[test]
     fn test_put_get() {
-        let _ = env_logger::init();
-
         let brick_name = "brick1";
         let brick_id = add_brick(brick_name);
 
