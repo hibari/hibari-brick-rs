@@ -8,6 +8,8 @@ machine:
     Asia/Shanghai
   environment:
     PATH: $PATH:$HOME/.cargo/bin
+    RUST_NIGHTLY_DATE: "2018-04-06"
+    RUST_CLIPPY_VERSION: "0.0.192"
     # Parallel gcc jobs for building Snappy and RocksDB.
     # See: https://github.com/hibari/hibari-brick-rs/issues/3
     CI_NUM_JOBS: 4
@@ -27,26 +29,28 @@ dependencies:
     - rustup self update
     - rustup update stable
     - rustup install beta; rustup update beta
-    - rustup install nightly; rustup update nightly
-    - rustup run stable rustc --version --verbose
-    - rustup run stable cargo --version --verbose
-    - rustup run beta rustc --version --verbose
-    - rustup run beta cargo --version --verbose
-    - rustup run nightly rustc --version --verbose
-    - rustup run nightly cargo --version --verbose
+    - rustup install nightly-${RUST_NIGHTLY_DATE}; rustup update nightly-${RUST_NIGHTLY_DATE}
+    - cargo +nightly-${RUST_NIGHTLY_DATE} install clippy --vers $RUST_CLIPPY_VERSION --force
+    - rustc +stable --version --verbose
+    - cargo +stable --version --verbose
+    - rustc +beta --version --verbose
+    - cargo +beta --version --verbose
+    - rustc +nightly-${RUST_NIGHTLY_DATE} --version --verbose
+    - cargo +nightly-${RUST_NIGHTLY_DATE} --version --verbose
+    - cargo +nightly-${RUST_NIGHTLY_DATE} clippy --version
   cache_directories:
     - "~/.cargo"
 
 test:
   override:
-    - rustup run nightly cargo clean
-    - rustup run nightly cargo build --jobs $CI_NUM_JOBS --features=clippy:
+    - cargo +nightly-${RUST_NIGHTLY_DATE} clean
+    - cargo +nightly-${RUST_NIGHTLY_DATE} clippy --jobs $CI_NUM_JOBS:
         timeout: 900
-    - rustup run stable cargo clean
-    - rustup run stable cargo test --jobs $CI_NUM_JOBS --release:
+    - cargo +stable clean
+    - cargo +stable test --jobs $CI_NUM_JOBS --release:
         timeout: 900
-    - rustup run stable cargo run --release --example simple
-    - rustup run beta cargo clean
-    - rustup run beta cargo test --jobs $CI_NUM_JOBS --release:
+    - cargo +stable run --release --example simple
+    - cargo +beta clean
+    - cargo +beta test --jobs $CI_NUM_JOBS --release:
         timeout: 900
-    - rustup run beta cargo run --release --example simple
+    - cargo +beta run --release --example simple
