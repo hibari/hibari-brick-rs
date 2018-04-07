@@ -8,8 +8,8 @@ machine:
     Asia/Shanghai
   environment:
     PATH: $PATH:$HOME/.cargo/bin
-    RUST_NIGHTLY_DATE: 2018-04-06
-    RUST_CLIPPY_VERSION: 0.0.192
+    RUST_NIGHTLY_DATE: "2018-04-06"
+    RUST_CLIPPY_VERSION: "0.0.192"
     # Parallel gcc jobs for building Snappy and RocksDB.
     # See: https://github.com/hibari/hibari-brick-rs/issues/3
     CI_NUM_JOBS: 4
