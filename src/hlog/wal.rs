@@ -206,7 +206,7 @@ impl WalWriter {
                      wal_position: &WalPosition)
                      -> io::Result<Option<Vec<u8>>> {
 
-        let position = wal_position.wal_hunk_pos + wal_position.val_offset as u64;
+        let position = wal_position.wal_hunk_pos + u64::from(wal_position.val_offset);
 
         // read blob (from HLog or WAL)
         let mut f = File::open(WAL_PATH.as_path())?;
@@ -217,7 +217,7 @@ impl WalWriter {
         }
         assert_eq!(pos, position);
 
-        let val_len = wal_position.val_len as u64;
+        let val_len = u64::from(wal_position.val_len);
         let mut chunk = f.take(val_len);
         let mut buf = Vec::with_capacity(val_len as usize);
         let mut size = chunk.read_to_end(&mut buf)?;
@@ -298,14 +298,14 @@ fn handle_requests(rx: &Receiver<Request>, mut writer: BufWriter<File>) {
                 let brick_name = brick_info.brick_name.to_string();
                 let result = do_put_blob(&mut writer, &mut pos, &mut brick_info, req)
                     .map(|wal_position| PutBlobResult {
-                        brick_name: brick_name,
+                        brick_name,
                         storage_position: wal_position,
                     });
                 promise.set(result);
             }
             Request::Flush(promise) => {
                 writer.flush().unwrap();
-                promise.set(FlushPosition { pos: pos });
+                promise.set(FlushPosition { pos });
             }
             Request::GetCurrentSeqNumAndDiskPos(promise) => {
                 // flush to ensure all bytes up to `pos` are available for reading.
@@ -390,8 +390,8 @@ fn do_put_blob(writer: &mut BufWriter<File>,
     };
     let HunkSize { raw_size, padding_size, .. } =
         hunk::calc_hunk_size(&HunkType::BlobSingle, &hunk_flags, 0, 1, val_len);
-    *pos += hunk_size as HunkOffset;
-    *private_hunk_pos += raw_size as HunkOffset + padding_size as HunkOffset;
+    *pos += HunkOffset::from(hunk_size);
+    *private_hunk_pos += HunkOffset::from(raw_size) + HunkOffset::from(padding_size);
     Ok(wal_position)
 }
 

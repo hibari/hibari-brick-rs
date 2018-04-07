@@ -34,7 +34,7 @@ use super::hunk::{self, BinaryHunk, BlobSingleHunk, BlobWalHunk, BoxedHunk, CHEC
 use super::wal::{AllocatedPrivateHLogPosition, HunkOffset, SeqNum, WalWriter};
 
 // TODO: Configurable
-pub const PRIVATE_BLOB_PATH: &'static str = "/tmp/hibari-brick-test-data-blob-";
+pub const PRIVATE_BLOB_PATH: &str = "/tmp/hibari-brick-test-data-blob-";
 pub const WRITE_BACK_INTERVAL_SECS: i64 = 2;
 
 lazy_static! {

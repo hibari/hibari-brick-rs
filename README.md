@@ -47,13 +47,15 @@ Dropbox and Mozilla (Firefox):
 **Rust tool-chain**
 
 - A *stable release* (1.17 or newer) is required.
-  * This is because it utilizes
-    [object literal property value shorthand](https://blog.rust-lang.org/2017/04/27/Rust-1.17.html)
-    in 1.17, as well as relying on
-    [`?` operator](https://blog.rust-lang.org/2016/11/10/Rust-1.13.html)
-    in 1.13 and
-    [`catch_unwind()`](https://blog.rust-lang.org/2016/05/26/Rust-1.9.html)
-    in 1.9.)
+  * This is because it utilizes the following features:
+    + [field init shorthand syntax](https://blog.rust-lang.org/2017/04/27/Rust-1.17.html)
+      since 1.17
+    + [static lifetime in stitics and consts](https://blog.rust-lang.org/2017/04/27/Rust-1.17.html)
+      since 1.17
+    + [`?` operator](https://blog.rust-lang.org/2016/11/10/Rust-1.13.html)
+      since 1.13
+    + [`catch_unwind()`](https://blog.rust-lang.org/2016/05/26/Rust-1.9.html)
+      since 1.9
 - Optionally, a *nightly build* of Rust to run a code-lint tool called
   "Clippy".
 - Use [rustup.rs](https://rustup.rs/) to install the latest stable

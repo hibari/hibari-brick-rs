@@ -123,15 +123,15 @@ use std::io::{Cursor, Write};
 // processes) should pack multiple values into one hunk (~= 4KB
 // so that it can avoid the overhead of hunk enclosure.
 
-// const FILE_SIGNATURE: &'static [u8] = &[0x8Au8, 'H' as u8, 'L' as u8, 'G' as u8, '\r' as u8,
-//                                         '\n' as u8, 0x1Au8, '\n' as u8];
+// const FILE_SIGNATURE: &[u8] = &[0x8Au8, 'H' as u8, 'L' as u8, 'G' as u8, '\r' as u8,
+//                                 '\n' as u8, 0x1Au8, '\n' as u8];
 
 const HUNK_HEADER_SIZE: u8 = 12;
 const HUNK_MIN_FOOTER_SIZE: u8 = 2;
 const HUNK_ALIGNMENT: u8 = 8;
 
-const HUNK_HEADER_MAGIC: &'static [u8] = &[0x90u8, 0x7Fu8];  // 144, 127
-const HUNK_FOOTER_MAGIC: &'static [u8] = &[0x07u8, 0xE3u8];  //   7, 227
+const HUNK_HEADER_MAGIC: &[u8] = &[0x90u8, 0x7Fu8];  // 144, 127
+const HUNK_FOOTER_MAGIC: &[u8] = &[0x07u8, 0xE3u8];  //   7, 227
 
 const TYPE_METADATA: u8 = b'm';
 const TYPE_BLOB_WAL: u8 = b'w';
@@ -358,13 +358,13 @@ pub fn calc_hunk_size(hunk_type: &HunkType,
         0
     };
 
-    let footer_size = HUNK_MIN_FOOTER_SIZE as u16 + checksum_size + brick_name_size + blob_index_size +
+    let footer_size = u16::from(HUNK_MIN_FOOTER_SIZE) + checksum_size + brick_name_size + blob_index_size +
                       blob_age_size;
     // raw_size includes footer_size.
-    let raw_size = HUNK_HEADER_SIZE as u32 + total_blob_size + footer_size as u32;
-    let rem: u8 = (raw_size % HUNK_ALIGNMENT as u32) as u8;
+    let raw_size = u32::from(HUNK_HEADER_SIZE) + total_blob_size + u32::from(footer_size);
+    let rem: u8 = (raw_size % u32::from(HUNK_ALIGNMENT)) as u8;
     let padding_size: u8 = if rem == 0 { 0 } else { HUNK_ALIGNMENT - rem };
-    let overhead = (raw_size + padding_size as u32 - total_blob_size) as u8;
+    let overhead = (raw_size + u32::from(padding_size) - total_blob_size) as u8;
     HunkSize { raw_size, footer_size, padding_size, overhead }
 }
 
@@ -386,7 +386,7 @@ fn encode_hunk(hunk_type: HunkType,
                                                                            brick_name_size,
                                                                            number_of_blobs,
                                                                            total_blob_size);
-    let hunk_size = raw_size + padding_size as u32;
+    let hunk_size = raw_size + u32::from(padding_size);
     let mut hunk = Vec::with_capacity(hunk_size as usize);
 
     append_hunk_header(&mut hunk,
@@ -412,7 +412,7 @@ fn create_blob_index(blobs: &[Blob]) -> (Vec<u32>, u16) {
     let mut blob_index = Vec::with_capacity(blob_count);
 
     if blob_count > 0 {
-        let mut offset = HUNK_HEADER_SIZE as u32;
+        let mut offset = u32::from(HUNK_HEADER_SIZE);
         blob_index.push(offset);
 
         for &Blob(ref blob) in &blobs[..(blob_count - 1)] {
@@ -729,10 +729,10 @@ fn parse_hunk_footer(hunk_type: &HunkType,
     }
 
     Ok(ParseHunkFooterResult {
-        checksum: checksum,
-        brick_name: brick_name,
-        blob_index_range: blob_index_range,
-        blob_ages_range: blob_ages_range,
+        checksum,
+        brick_name,
+        blob_index_range,
+        blob_ages_range,
     })
 }
 
